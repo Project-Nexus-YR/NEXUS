@@ -97,6 +97,7 @@ class HybridRetriever:
         self._vector_store = vector_store
         self._embedder = embedder
         self._entity_index = entity_index or EntityIndex(repository.entities)
+        self._entity_repo = repository.entities
         self._active_methods = active_methods
         self._lexical = LexicalRetriever()
         self._vector = VectorRetriever(embedder, vector_store)
@@ -107,6 +108,7 @@ class HybridRetriever:
         self._reranker = reranker if reranker is not None else DeterministicReranker()
         self._lexical_pool_factor = lexical_pool_factor
         self._indexed_chunk_count = -1
+        self._indexed_entity_count = self._entity_repo.count()
 
     # -- public API ---------------------------------------------------
     def retrieve(
@@ -116,7 +118,7 @@ class HybridRetriever:
         metadata_filter: dict[str, object] | None = None,
     ) -> RetrievalResult:
         trace = RetrievalTrace(query=text)
-        self._sync_lexical_index()
+        self._sync_indexes()
 
         matched = self._entity_index.match(text)
         analysis = analyze_query(
@@ -209,15 +211,23 @@ class HybridRetriever:
             trace=trace,
         )
 
+    def invalidate_lexical_index(self) -> None:
+        """Force the BM25 and entity indexes to rebuild on next retrieval."""
+        self._indexed_chunk_count = -1
+        self._indexed_entity_count = -1
+
+    def _sync_indexes(self) -> None:
+        if self._entity_repo.count() != self._indexed_entity_count:
+            self._entity_index = EntityIndex(self._entity_repo)
+            self._indexed_entity_count = self._entity_repo.count()
+        chunk_count = self._repository.chunks.count()
+        if chunk_count != self._indexed_chunk_count:
+            self._lexical.add_chunks(self._repository.chunks.all())
+            self._indexed_chunk_count = chunk_count
+
     def _timed(self, method: str, fn, trace: RetrievalTrace) -> list:
         started = time.perf_counter()
         results = fn()
         latency = (time.perf_counter() - started) * 1000.0
         trace.method_results.append(MethodLatency(method, len(results), latency))
         return results
-
-    def _sync_lexical_index(self) -> None:
-        count = self._repository.chunks.count()
-        if count != self._indexed_chunk_count:
-            self._lexical.add_chunks(self._repository.chunks.all())
-            self._indexed_chunk_count = count

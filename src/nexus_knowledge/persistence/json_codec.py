@@ -16,6 +16,7 @@ from typing import Any
 
 from ..domain.claim import Claim, Evidence
 from ..domain.common import Confidence, VerificationState
+from ..domain.contradiction import Contradiction
 from ..domain.document import Chunk, Document, Span
 from ..domain.entity import Entity, Relation
 from ..domain.hypothesis import Experiment, Hypothesis, Observation, Result
@@ -67,6 +68,7 @@ def _resolve(value: str) -> type[Any]:
         "claim": Claim,
         "chunk": Chunk,
         "confidence": Confidence,
+        "contradiction": Contradiction,
         "document": Document,
         "entity": Entity,
         "evidence": Evidence,

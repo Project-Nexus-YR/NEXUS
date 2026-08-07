@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Generic, Protocol, TypeVar
 
 from ..domain.claim import Claim, Evidence
+from ..domain.contradiction import Contradiction
 from ..domain.document import Chunk, Document
 from ..domain.entity import Entity, Relation
 from ..domain.hypothesis import Experiment, Hypothesis, Observation, Result
@@ -28,6 +29,7 @@ __all__ = [
     "ClaimRepository",
     "EvidenceRepository",
     "KnowledgeRepository",
+    "ContradictionRepository",
 ]
 
 
@@ -69,6 +71,9 @@ class EvidenceRepository(Repository[Evidence], Protocol):
     def by_claim(self, claim_id: str) -> list[Evidence]: ...
 
 
+class ContradictionRepository(Repository[Contradiction], Protocol): ...
+
+
 class KnowledgeRepository(Protocol):
     """Aggregate view over all domain repositories.
 
@@ -83,6 +88,7 @@ class KnowledgeRepository(Protocol):
     relations: RelationRepository
     claims: ClaimRepository
     evidence: EvidenceRepository
+    contradictions: Repository[Contradiction]
     hypotheses: Repository[Hypothesis]
     experiments: Repository[Experiment]
     results: Repository[Result]

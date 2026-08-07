@@ -2,6 +2,7 @@
 
 from .claim import Claim, Evidence, EvidenceRole, Provenance
 from .common import Confidence, VerificationState
+from .contradiction import Contradiction, ContradictionKind
 from .document import Chunk, Document, Span
 from .entity import Entity, Relation
 from .hypothesis import Experiment, Hypothesis, Observation, Result
@@ -13,6 +14,8 @@ __all__ = [
     "Claim",
     "Chunk",
     "Confidence",
+    "Contradiction",
+    "ContradictionKind",
     "Document",
     "Entity",
     "Evidence",

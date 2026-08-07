@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Generic, TypeVar
 
 from ..domain.claim import Claim, Evidence
+from ..domain.contradiction import Contradiction
 from ..domain.document import Chunk, Document
 from ..domain.entity import Entity, Relation
 from ..domain.hypothesis import Experiment, Hypothesis, Observation, Result
@@ -110,6 +111,7 @@ class InMemoryKnowledgeRepository(KnowledgeRepository):
         self.relations = InMemoryRelationRepository()
         self.claims = InMemoryClaimRepository()
         self.evidence = InMemoryEvidenceRepository()
+        self.contradictions: Repository[Contradiction] = InMemoryRepository[Contradiction]()
         self.hypotheses: Repository[Hypothesis] = InMemoryRepository[Hypothesis]()
         self.experiments: Repository[Experiment] = InMemoryRepository[Experiment]()
         self.results: Repository[Result] = InMemoryRepository[Result]()
