@@ -27,6 +27,7 @@ _RELATION_PATTERNS: list[tuple[str, str]] = [
     (r"headquartered\s+in", "headquartered_in"),
     (r"discovered\s+by", "discovered_by"),
     (r"developed\s+by", "developed_by"),
+    (r"develops", "develops"),
     (r"caused\s+by", "caused_by"),
     (r"invented", "invented_by"),
     (r"studied\s+at", "studied_at"),

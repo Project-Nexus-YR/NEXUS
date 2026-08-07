@@ -45,6 +45,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     stats = sub.add_parser("stats", help="graph statistics")
     stats.add_argument("--data", default=None)
+
+    bench = sub.add_parser("bench", help="run the evaluation benchmarks")
+    bench.add_argument("--output", default=None, help="write the report to a JSON file")
     return parser
 
 
@@ -85,6 +88,15 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps([s.to_dict() for s in scored], indent=2))
     elif args.command == "stats":
         print(json.dumps(engine.graph_statistics(), indent=2))
+    elif args.command == "bench":
+        from .eval.benchmarks import run_benchmarks
+
+        report = run_benchmarks()
+        text = report.to_json()
+        print(text)
+        if args.output:
+            with open(args.output, "w", encoding="utf-8") as handle:
+                handle.write(text)
     return 0
 
 
