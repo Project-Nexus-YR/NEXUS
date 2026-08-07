@@ -16,7 +16,7 @@ from ..port.extractors import ExtractedEntity, ExtractedRelation
 
 __all__ = ["GazetteerEntityExtractor", "PatternRelationExtractor"]
 
-_TOKEN_RE = re.compile(r"[^\s,.;:()]+")
+_TOKEN_RE = re.compile(r"[^\s,.;:()?!]+")
 
 _RELATION_PATTERNS: list[tuple[str, str]] = [
     (r"works?\s+at", "works_at"),
