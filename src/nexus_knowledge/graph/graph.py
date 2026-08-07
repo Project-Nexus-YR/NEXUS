@@ -147,10 +147,12 @@ class KnowledgeGraph(ABC):
         depth: int = 2,
         max_nodes: int = 100,
         max_edges: int = 500,
+        direction: str = "both",
     ) -> tuple[set[str], list[Edge]]:
         """Bounded expansion around seed entities.
 
-        Returns ``(visited_node_ids, edges_touched)``.
+        Returns ``(visited_node_ids, edges_touched)``. ``direction`` is
+        ``"out"``, ``"in"`` or ``"both"``.
         """
 
     @abstractmethod
@@ -170,6 +172,7 @@ class KnowledgeGraph(ABC):
         depth: int = 1,
         max_nodes: int = 100,
         max_edges: int = 500,
+        direction: str = "both",
     ) -> KnowledgeSubgraph:
         """Extract a bounded subgraph around the given entities."""
 

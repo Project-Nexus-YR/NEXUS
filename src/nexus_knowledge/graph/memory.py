@@ -117,6 +117,7 @@ class InMemoryGraph(KnowledgeGraph):
         depth: int = 2,
         max_nodes: int = 100,
         max_edges: int = 500,
+        direction: str = "both",
     ) -> tuple[set[str], list[Edge]]:
         visited: set[str] = set(seed_ids)
         edges: list[Edge] = []
@@ -124,13 +125,14 @@ class InMemoryGraph(KnowledgeGraph):
         for _ in range(depth):
             next_frontier: set[str] = set()
             for node in frontier:
-                for edge in self.neighbors(node, "out"):
+                for edge in self.neighbors(node, direction):
                     if len(edges) >= max_edges:
                         return visited, edges
                     edges.append(edge)
-                    if edge.object_id not in visited and len(visited) < max_nodes:
-                        visited.add(edge.object_id)
-                        next_frontier.add(edge.object_id)
+                    other = edge.object_id if edge.subject_id == node else edge.subject_id
+                    if other not in visited and len(visited) < max_nodes:
+                        visited.add(other)
+                        next_frontier.add(other)
             frontier = list(next_frontier)
             if not frontier:
                 break
@@ -171,9 +173,10 @@ class InMemoryGraph(KnowledgeGraph):
         depth: int = 1,
         max_nodes: int = 100,
         max_edges: int = 500,
+        direction: str = "both",
     ) -> KnowledgeSubgraph:
         visited, edges = self.traversal(
-            entity_ids, depth=depth, max_nodes=max_nodes, max_edges=max_edges
+            entity_ids, depth=depth, max_nodes=max_nodes, max_edges=max_edges, direction=direction
         )
         nodes = {eid: self._entities[eid] for eid in visited if eid in self._entities}
         return KnowledgeSubgraph(nodes=nodes, edges=tuple(edges))
