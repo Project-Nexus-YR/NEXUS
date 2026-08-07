@@ -42,7 +42,9 @@ production uses UTC system time.
 
 ## Coordination and persistence
 
-The local durable backend is SQLite. Every ownership-sensitive operation runs inside a
+The local durable backend is SQLite. `TaskStore`, `WorkerStore`, and `LeaseStore` are
+explicit ports; lease mutation is deliberately co-located with TaskStore transactions
+so task ownership cannot diverge from its lease. Every ownership-sensitive operation runs inside a
 `BEGIN IMMEDIATE` transaction: claim, start, renew, complete, fail, cancel, and expired
 lease recovery. The in-memory backend uses the same interface and an `RLock` for the
 deterministic simulator. These mechanisms establish atomicity only for one store, not

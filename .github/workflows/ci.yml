@@ -28,7 +28,7 @@ jobs:
       - name: Coverage
         run: |
           pip install pytest-cov
-          pytest --cov=nexus_knowledge --cov-report=term-missing --cov-fail-under=80
+          pytest --cov=nexus_knowledge --cov=nexus_runtime --cov-report=term-missing --cov-fail-under=80
 
   verify:
     runs-on: ubuntu-latest
@@ -47,3 +47,5 @@ jobs:
         run: python -m mypy src/nexus_runtime
       - name: Tests
         run: python -m pytest -ra
+      - name: Distributed simulation smoke test
+        run: python -c "from nexus_runtime.distributed.benchmark import run_benchmark; assert run_benchmark(100, 10)['results']['succeeded'] == 100"

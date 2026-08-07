@@ -75,7 +75,7 @@ and returns proposals for knowledge updates.
 
 **Status**
 
-This initial milestone provides an executable, provider-neutral runtime core:
+The Phase 3 milestone provides a provider-neutral distributed execution layer:
 
 - explicit agent, task, hypothesis, and experiment state machines;
 - a dynamic, cycle-safe task DAG and priority scheduler with worker leases;
@@ -85,6 +85,10 @@ This initial milestone provides an executable, provider-neutral runtime core:
   deterministic replay, capability policy checks, and structured outputs;
 - interfaces for model, tools, memory, search, workflow, and knowledge services;
 - mock-provider end-to-end and failure-injection tests.
+- atomic in-memory and SQLite TaskStore adapters, worker identities and capacity,
+  priority aging, durable cancellation, dead letters, metrics, and coordinator restart;
+- a deterministic local multi-worker simulator using the same Coordinator, Worker,
+  scheduler, queue, and harness interfaces as production adapters.
 
 The public service boundary is intentionally `KnowledgeService`; NEXUS does not read
 the knowledge engine's database.
@@ -102,6 +106,21 @@ Run the mock end-to-end test without optional development dependencies:
 
 ```bash
 PYTHONPATH=src python3 -m unittest tests.test_end_to_end -v
+```
+
+Submit and inspect durable distributed tasks:
+
+```bash
+nexus-runtime --db .nexus/runtime.sqlite submit run-123 \
+  --correlation-id investigation-123 --capability agent.execute
+nexus-runtime --db .nexus/runtime.sqlite queue
+nexus-runtime --db .nexus/runtime.sqlite task TASK_ID
+```
+
+Run the 1,000-task/10-worker local benchmark:
+
+```bash
+nexus-runtime-bench
 ```
 
 **Guarantees**
@@ -165,4 +184,4 @@ pytest --cov=nexus_knowledge --cov-fail-under=80   # knowledge engine coverage g
 ```
 
 See [architecture](docs/architecture.md), [runtime](docs/runtime.md), and
-[API contract](docs/api-contract.md) for the integration boundary.
+[distributed runtime](docs/distributed-runtime.md) for the integration boundary.

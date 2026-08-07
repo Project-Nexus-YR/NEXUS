@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nexus"
-version = "0.1.0"
+version = "0.3.0"
 description = "NEXUS autonomous knowledge-discovery platform: knowledge intelligence engine and fault-tolerant research runtime"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -29,6 +29,8 @@ dev = ["ruff>=0.6", "mypy>=1.11", "pytest>=7.4", "pytest-cov>=4.1"]
 
 [project.scripts]
 nexus-knowledge = "nexus_knowledge.cli:main"
+nexus-runtime = "nexus_runtime.distributed.cli:main"
+nexus-runtime-bench = "nexus_runtime.distributed.benchmark:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
