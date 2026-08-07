@@ -66,8 +66,9 @@ def pagerank(
     for node, neighbors in adj.items():
         i = index[node]
         out_degree[i] = len(neighbors)
+        total = sum(abs(weight) for _, weight in neighbors) or 1.0
         for neighbor, weight in neighbors:
-            edges[i].append((index[neighbor], weight))
+            edges[i].append((index[neighbor], max(0.0, weight) / total))
 
     if personalization:
         total = sum(personalization.values()) or 1.0

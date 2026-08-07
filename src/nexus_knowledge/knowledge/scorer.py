@@ -104,6 +104,8 @@ class InvestigationScorer:
             for investigation in gap.candidate_investigations:
                 scored.append(self.score(investigation, gap))
         scored.sort(key=lambda s: s.score, reverse=True)
+        for result in scored:
+            self._commit(result)
         return scored
 
     def _commit(self, scored: ScoredInvestigation) -> None:

@@ -103,6 +103,6 @@ class RecursiveChunker:
                 result.append((start, end))
                 continue
             prev_end = result[-1][1]
-            overlap_start = max(start, prev_end - self.overlap)
+            overlap_start = max(0, prev_end - self.overlap)
             result.append((overlap_start, end))
         return result
