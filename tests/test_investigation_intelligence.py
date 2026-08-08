@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from nexus_knowledge.domain.knowledge_gap import GapKind, Investigation, KnowledgeGap
+from nexus_runtime.investigation.generator import CandidateInvestigation, InvestigationGenerator
 from nexus_runtime.investigation.objective import ResearchObjective
+from nexus_runtime.investigation.scoring import InvestigationScore, InvestigationScoringModel
+from nexus_runtime.investigation.selector import InvestigationSelector
 from nexus_runtime.investigation.session import (
     InvestigationBudget,
     InvestigationSession,
+    InvestigationUsage,
     SessionState,
     TerminationReason,
 )
@@ -41,6 +47,42 @@ def budget(**overrides: object) -> InvestigationBudget:
     }
     values.update(overrides)
     return InvestigationBudget(**values)  # type: ignore[arg-type]
+
+
+def gap(
+    gap_id: str = "gap-1",
+    *,
+    kind: str = GapKind.LOW_CONFIDENCE,
+    cost: float = 2.0,
+    question: str = "verify claim",
+) -> KnowledgeGap:
+    item = KnowledgeGap(
+        id=gap_id,
+        kind=kind,
+        description="claim confidence is low",
+        reason="confidence below threshold",
+        affected_entities=["entity-1"],
+        uncertainty=0.8,
+        importance=0.7,
+        estimated_cost=cost,
+        created_at="2026-01-01T00:00:00Z",
+    )
+    item.candidate_investigations = [
+        Investigation(
+            id=f"legacy-{gap_id}",
+            gap_id=gap_id,
+            description=question,
+            target_entities=["entity-1"],
+            estimated_cost=cost,
+            metadata={"estimated_duration_seconds": 30, "evidence_availability": 0.7},
+            created_at="2026-01-01T00:00:00Z",
+        )
+    ]
+    return item
+
+
+def candidate(item: KnowledgeGap | None = None) -> CandidateInvestigation:
+    return InvestigationGenerator().generate(objective(), [item or gap()])[0]
 
 
 class TestResearchObjective:
@@ -127,3 +169,119 @@ class TestInvestigationSession:
     def test_budget_is_bounded(self, bad_budget: dict[str, object]) -> None:
         with pytest.raises(DomainError):
             budget(**bad_budget)
+
+
+class TestInvestigationGeneration:
+    def test_existing_gap_candidates_are_enriched_deterministically(self) -> None:
+        item = gap()
+        first = InvestigationGenerator().generate(objective(), [item])
+        second = InvestigationGenerator().generate(objective(), [item])
+
+        assert [value.to_dict() for value in first] == [value.to_dict() for value in second]
+        assert first[0].gap_id == item.id
+        assert first[0].capabilities == ("search", "verification")
+        assert first[0].metadata["legacy_investigation_id"] == "legacy-gap-1"
+
+    def test_duplicate_candidates_are_collapsed(self) -> None:
+        item = gap()
+        duplicate = replace(item.candidate_investigations[0], id="legacy-duplicate")
+        item.candidate_investigations.append(duplicate)
+
+        assert len(InvestigationGenerator().generate(objective(), [item])) == 1
+
+    def test_candidate_round_trip(self) -> None:
+        original = candidate()
+        restored = CandidateInvestigation.from_dict(json.loads(json.dumps(original.to_dict())))
+        assert restored == original
+
+    def test_invalid_candidate_is_rejected(self) -> None:
+        with pytest.raises(DomainError, match="expected_information_gain"):
+            replace(candidate(), expected_information_gain=1.1)
+
+
+class TestInvestigationScoring:
+    def test_cost_and_risk_temper_information_gain(self) -> None:
+        item = gap()
+        base = candidate(item)
+        expensive = replace(
+            base,
+            investigation_id="expensive",
+            estimated_cost=100.0,
+            risk=0.9,
+        )
+        model = InvestigationScoringModel()
+
+        assert model.score(base, item).score > model.score(expensive, item).score
+
+    def test_components_explain_selection_value(self) -> None:
+        item = gap()
+        result = InvestigationScoringModel().score(candidate(item), item)
+
+        assert set(result.components) == {
+            "information_gain",
+            "gap_importance",
+            "uncertainty_reduction",
+            "evidence_availability",
+            "priority",
+            "knowledge_score",
+            "cost_penalty",
+            "time_penalty",
+            "risk_penalty",
+            "redundancy_penalty",
+        }
+        assert "cost_penalty=" in result.rationale
+
+    def test_unknown_gap_is_rejected(self) -> None:
+        with pytest.raises(DomainError, match="unknown knowledge gap"):
+            InvestigationScoringModel().score_all([candidate()], [])
+
+
+class TestInvestigationSelection:
+    def test_top_k_capacity_and_cost_are_enforced(self) -> None:
+        gaps = [gap(f"gap-{index}", cost=2.0) for index in range(3)]
+        candidates = [candidate(item) for item in gaps]
+        scored = InvestigationScoringModel().score_all(candidates, gaps)
+
+        result = InvestigationSelector().select(
+            scored,
+            budget=budget(max_cost=3.0),
+            usage=InvestigationUsage(),
+            worker_capacity=3,
+            top_k=3,
+        )
+
+        assert len(result.selected) == 1
+        assert set(result.rejected.values()) == {"cost_budget"}
+
+    def test_redundant_evidence_need_is_not_selected_twice(self) -> None:
+        first = candidate()
+        second = replace(
+            first,
+            investigation_id="alternative",
+            question="independently verify claim?",
+        )
+        scores = (
+            InvestigationScore(first, 0.8, {}, "first"),
+            InvestigationScore(second, 0.7, {}, "second"),
+        )
+
+        result = InvestigationSelector().select(
+            scores,
+            budget=budget(),
+            usage=InvestigationUsage(),
+            worker_capacity=2,
+        )
+
+        assert [item.candidate for item in result.selected] == [first]
+        assert result.rejected[second.investigation_id] == "redundant_evidence_need"
+
+    def test_remaining_usage_limits_selection(self) -> None:
+        item = candidate()
+        result = InvestigationSelector().select(
+            [InvestigationScore(item, 0.9, {}, "valuable")],
+            budget=budget(max_investigations=1),
+            usage=InvestigationUsage(investigations=1),
+            worker_capacity=1,
+        )
+        assert result.selected == ()
+        assert result.rejected[item.investigation_id] == "selection_limit"
