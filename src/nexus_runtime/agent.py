@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from datetime import timedelta
+from dataclasses import asdict
 from enum import StrEnum
 from typing import Any
 
@@ -14,9 +13,15 @@ from .models import (
     AgentRun,
     AgentRunState,
     AgentStep,
+    Budget,
     DomainError,
     Observation,
     ToolCall,
+    agent_from_dict,
+    budget_from_dict,
+    budget_to_dict,
+    new_id,
+    run_from_checkpoint,
     utcnow,
 )
 from .persistence import StateStore
@@ -33,27 +38,15 @@ class AgentRole(StrEnum):
     SYNTHESIZER = "Synthesizer"
 
 
-@dataclass(frozen=True, slots=True)
-class Budget:
-    max_tokens: int
-    max_wall_time: timedelta
-    max_tool_calls: int
-    max_workers: int
-    max_experiment_resources: int
+Budget.__module__ = __name__
 
-    def __post_init__(self) -> None:
-        if (
-            min(
-                self.max_tokens,
-                self.max_tool_calls,
-                self.max_workers,
-                self.max_experiment_resources,
-            )
-            < 0
-        ):
-            raise DomainError("budget values cannot be negative")
-        if self.max_wall_time <= timedelta(0):
-            raise DomainError("wall-time budget must be positive")
+__all__ = [
+    "AgentExecutor",
+    "AgentRole",
+    "Budget",
+    "budget_from_dict",
+    "run_from_checkpoint",
+]
 
 
 class AgentExecutor:
@@ -95,6 +88,8 @@ class AgentExecutor:
         self._store = state_store
         self._runs: dict[str, AgentRun] = {}
         self._budgets: dict[str, Budget] = {}
+        self._agents: dict[str, Agent] = {}
+        self._delegation_agents: dict[str, Agent] = {}
 
     def create_run(
         self, agent: Agent, investigation_id: str, budget: Budget, task_id: str | None = None
@@ -102,9 +97,78 @@ class AgentExecutor:
         run = AgentRun(agent_id=agent.agent_id, investigation_id=investigation_id, task_id=task_id)
         self._runs[run.run_id] = run
         self._budgets[run.run_id] = budget
+        self._agents[agent.agent_id] = agent
         self._emit("agent.run.created", run, {"agent_id": agent.agent_id})
         self.checkpoint(run.run_id)
         return run
+
+    def build_delegation(
+        self,
+        parent_run_id: str,
+        delegated_to: Agent,
+        task: str,
+        budget: Budget,
+        *,
+        max_depth: int = 4,
+    ) -> AgentRun:
+        """Create a child AgentRun whose context_refs seed it with the delegation task.
+
+        The child is persisted as its own checkpoint so that, together with
+        ``resume(run_id, subagent_resume=True)``, an interrupted hierarchy can be
+        reconstructed and resumed after a crash or restart.
+        """
+        if max_depth < 0:
+            raise DomainError("max delegation depth cannot be negative")
+        parent = self._run(parent_run_id)
+        self._require_running(parent)
+        delegation_id = new_id("delegation")
+        depth = parent.depth + 1
+        if depth > max_depth:
+            raise DomainError(f"delegation depth {depth} exceeds max depth {max_depth}")
+        child = AgentRun(
+            agent_id=delegated_to.agent_id,
+            investigation_id=parent.investigation_id,
+            task_id=parent.task_id,
+            outputs={"delegation_task": task},
+            context_refs=[f"delegation_task:{delegation_id}"],
+            parent_run_id=parent.run_id,
+            root_run_id=parent.root_run_id or parent.run_id,
+            delegation_id=delegation_id,
+            depth=depth,
+        )
+        self._runs[child.run_id] = child
+        self._budgets[child.run_id] = budget
+        self._agents[delegated_to.agent_id] = delegated_to
+        self._delegation_agents[delegation_id] = delegated_to
+        parent.attached_delegations.append(delegation_id)
+        parent.updated_at = utcnow()
+        self._emit(
+            "agent.delegation.created",
+            parent,
+            {
+                "delegation_id": delegation_id,
+                "child_run_id": child.run_id,
+                "task": task,
+            },
+        )
+        self.checkpoint(parent.run_id)
+        self.checkpoint(child.run_id)
+        return child
+
+    def get_run(self, run_id: str) -> AgentRun:
+        return self._run(run_id)
+
+    def get_agent(self, agent_id: str) -> Agent:
+        try:
+            return self._agents[agent_id]
+        except KeyError as exc:
+            raise DomainError(f"unknown agent: {agent_id}") from exc
+
+    def get_delegation_agent(self, delegation_id: str) -> Agent:
+        try:
+            return self._delegation_agents[delegation_id]
+        except KeyError as exc:
+            raise DomainError(f"unknown delegation: {delegation_id}") from exc
 
     def observe(self, run_id: str, observation: Observation) -> AgentRun:
         run = self._run(run_id)
@@ -234,6 +298,8 @@ class AgentExecutor:
                 run_id,
                 {
                     "run": asdict(run),
+                    "agent": asdict(self.get_agent(run.agent_id)),
+                    "budget": budget_to_dict(self._budgets[run.run_id]),
                     "state": run.state.value,
                     "context_refs": run.context_refs,
                     "budget_used": run.budget_used,
@@ -243,6 +309,87 @@ class AgentExecutor:
 
     def restore_checkpoint(self, run_id: str) -> dict[str, Any] | None:
         return None if self._store is None else self._store.load_checkpoint(run_id)
+
+    def resume(
+        self,
+        run_id: str,
+        *,
+        subagent_resume: bool = False,
+        max_depth: int = 4,
+    ) -> AgentRun:
+        """Restore a persisted run in-place.
+
+        With ``subagent_resume=True`` the run is treated as a delegated child: its agent is
+        reconstructed from the checkpoint so its tool calls keep the right agent_id, and any
+        delegation it spawned is registered on the delegation agent cache.
+        """
+        if self._store is None:
+            if run_id not in self._runs:
+                raise DomainError("resume requires a state store for unknown runs")
+            existing = self._runs[run_id]
+            if subagent_resume and existing.delegation_id:
+                self._delegation_agents[existing.delegation_id] = self._agents[existing.agent_id]
+            self._emit("agent.run.resumed", existing, {"subagent_resume": subagent_resume})
+            return existing
+        payload = self._store.load_checkpoint(run_id)
+        if payload is None:
+            raise DomainError(f"no checkpoint for run: {run_id}")
+        raw_agent = payload.get("agent")
+        if not isinstance(raw_agent, dict):
+            raise DomainError("agent run checkpoint has no agent metadata")
+        restored = run_from_checkpoint(payload)
+        if restored.run_id != run_id:
+            raise DomainError("checkpoint run id does not match requested run")
+        agent = agent_from_dict(raw_agent)
+        budget = budget_from_dict(payload.get("budget")) or self._budgets.get(run_id)
+        if budget is None:
+            raise DomainError("agent run checkpoint has no budget")
+        self._runs[run_id] = restored
+        self._budgets[run_id] = budget
+        self._agents[agent.agent_id] = agent
+        if subagent_resume:
+            delegation_id = restored.delegation_id
+            if delegation_id:
+                self._delegation_agents[delegation_id] = agent
+            self._ensure_tree(restored, max_depth=max_depth)
+        self._emit("agent.run.resumed", restored, {"subagent_resume": subagent_resume})
+        return restored
+
+    def _ensure_tree(self, child: AgentRun, *, max_depth: int) -> None:
+        """Rebuild in-memory state for every ancestor of a restored delegation.
+
+        Walks ``parent_run_id`` links upward, restoring each missing ancestor from its
+        checkpoint so the orchestration layer can attach the child's result and resume.
+        """
+        if max_depth < 0:
+            raise DomainError("max delegation depth cannot be negative")
+        pending: list[AgentRun] = []
+        cursor = child
+        while cursor.parent_run_id:
+            parent_id = cursor.parent_run_id
+            if parent_id in self._runs:
+                cursor = self._runs[parent_id]
+                continue
+            payload = self._store.load_checkpoint(parent_id) if self._store else None
+            if payload is None:
+                raise DomainError(f"no checkpoint for parent run: {parent_id}")
+            raw_agent = payload.get("agent")
+            if not isinstance(raw_agent, dict):
+                raise DomainError("agent run checkpoint has no agent metadata")
+            parent = run_from_checkpoint(payload)
+            if parent.run_id != parent_id:
+                raise DomainError("checkpoint run id does not match requested run")
+            self._runs[parent_id] = parent
+            self._budgets[parent_id] = budget_from_dict(payload.get("budget"))
+            self._agents[parent.agent_id] = agent_from_dict(raw_agent)
+            if parent.delegation_id:
+                self._delegation_agents[parent.delegation_id] = self._agents[parent.agent_id]
+            pending.append(parent)
+            cursor = parent
+        for parent in pending:
+            self._emit(
+                "agent.run.resumed", parent, {"subagent_resume": True, "restored_parent": True}
+            )
 
     def _consume(self, run: AgentRun, key: str, amount: int) -> None:
         if amount < 0:

@@ -78,3 +78,196 @@ class AgentTests(unittest.TestCase):
         with self.assertRaisesRegex(DomainError, "budget exhausted"):
             executor.run_step(run.run_id, "answer", {})
         self.assertEqual(run.state, AgentRunState.PAUSED)
+
+    def test_delegation_builds_hierarchical_child_run(self) -> None:
+        executor, parent_agent = self._executor({"action": "finish", "output": {"summary": "p"}})
+        delegated = Agent("Analyst", "Analyst", frozenset({"search.execute"}))
+        parent = next(iter(executor._runs.values()))
+        budget = Budget(50, timedelta(minutes=1), 1, 1, 1)
+
+        child = executor.build_delegation(
+            parent.run_id, delegated, "analyze the evidence", budget
+        )
+
+        self.assertIsNotNone(child.delegation_id)
+        self.assertEqual(child.parent_run_id, parent.run_id)
+        self.assertEqual(child.root_run_id, parent.run_id)
+        self.assertEqual(child.depth, 1)
+        self.assertEqual(child.outputs["delegation_task"], "analyze the evidence")
+        self.assertIn(child.delegation_id, parent.attached_delegations)
+        self.assertEqual(
+            executor.get_delegation_agent(child.delegation_id).agent_id, delegated.agent_id
+        )
+
+    def test_delegation_depth_guard(self) -> None:
+        executor, _ = self._executor({"action": "finish", "output": {}})
+        delegated = Agent("Analyst", "Analyst", frozenset({"search.execute"}))
+        parent = next(iter(executor._runs.values()))
+        budget = Budget(50, timedelta(minutes=1), 1, 1, 1)
+
+        with self.assertRaisesRegex(DomainError, "depth"):
+            executor.build_delegation(parent.run_id, delegated, "too deep", budget, max_depth=0)
+
+    def test_checkpoint_resume_restores_child_hierarchy(self) -> None:
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        from nexus_runtime.persistence import SQLiteStateStore
+
+        parent_agent = Agent("Researcher", "Researcher", frozenset({"search.execute"}))
+        delegated = Agent("Analyst", "Analyst", frozenset({"search.execute"}))
+        task = "analyze the evidence"
+
+        with TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "runtime.sqlite"
+            store = SQLiteStateStore(path)
+            resumed_store: SQLiteStateStore | None = None
+            try:
+                registry = ToolRegistry(
+                    PolicyEngine(
+                        {
+                            parent_agent.agent_id: frozenset({"search.execute"}),
+                            delegated.agent_id: frozenset({"search.execute"}),
+                        }
+                    )
+                )
+                registry.register(SearchTool())
+                executor = AgentExecutor(Model({}), Memory(), registry, state_store=store)
+                parent = executor.create_run(
+                    parent_agent, "investigation-1", Budget(100, timedelta(minutes=1), 2, 1, 1)
+                )
+                executor.transition(parent.run_id, AgentRunState.RUNNING, "test")
+                child = executor.build_delegation(
+                    parent.run_id, delegated, task, Budget(50, timedelta(minutes=1), 1, 1, 1)
+                )
+                child_run_id = child.run_id
+                delegation_id = child.delegation_id
+
+                resumed_store = SQLiteStateStore(path)
+                restarted = AgentExecutor(Model({}), Memory(), registry, state_store=resumed_store)
+                restored = restarted.resume(child_run_id, subagent_resume=True)
+
+                self.assertEqual(restored.agent_id, delegated.agent_id)
+                self.assertEqual(restored.delegation_id, delegation_id)
+                self.assertEqual(restored.parent_run_id, parent.run_id)
+                self.assertEqual(restored.depth, 1)
+                self.assertEqual(restored.outputs["delegation_task"], task)
+                restored_parent = restarted.get_run(parent.run_id)
+                self.assertEqual(restored_parent.agent_id, parent_agent.agent_id)
+                self.assertIn(delegation_id, restored_parent.attached_delegations)
+                self.assertEqual(
+                    restarted.get_delegation_agent(delegation_id).agent_id, delegated.agent_id
+                )
+            finally:
+                store.close()
+                if resumed_store is not None:
+                    resumed_store.close()
+
+    def test_resumed_child_executes_tool_under_own_agent(self) -> None:
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        from nexus_runtime.persistence import SQLiteStateStore
+
+        parent_agent = Agent("Researcher", "Researcher", frozenset({"search.execute"}))
+        delegated = Agent("Analyst", "Analyst", frozenset({"search.execute"}))
+
+        with TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "runtime.sqlite"
+            store = SQLiteStateStore(path)
+            resumed_store: SQLiteStateStore | None = None
+            try:
+                registry = ToolRegistry(
+                    PolicyEngine(
+                        {
+                            parent_agent.agent_id: frozenset({"search.execute"}),
+                            delegated.agent_id: frozenset({"search.execute"}),
+                        }
+                    )
+                )
+                registry.register(SearchTool())
+                executor = AgentExecutor(Model({}), Memory(), registry, state_store=store)
+                parent = executor.create_run(
+                    parent_agent, "investigation-1", Budget(100, timedelta(minutes=1), 2, 1, 1)
+                )
+                executor.transition(parent.run_id, AgentRunState.RUNNING, "test")
+                child = executor.build_delegation(
+                    parent.run_id, delegated, "analyze", Budget(50, timedelta(minutes=1), 1, 1, 1)
+                )
+                child_run_id = child.run_id
+
+                resumed_store = SQLiteStateStore(path)
+                restarted = AgentExecutor(Model({}), Memory(), registry, state_store=resumed_store)
+                restored = restarted.resume(child_run_id, subagent_resume=True)
+                restarted.transition(restored.run_id, AgentRunState.RUNNING, "resume")
+                action = {"action": "tool", "tool": "search", "input": {"query": "x"}}
+
+                restarted.execute_action(restored.run_id, action)
+
+                tool_call = restored.tool_calls[-1]
+                self.assertEqual(tool_call.tool_name, "search")
+                self.assertEqual(tool_call.status, "ALLOW")
+                self.assertEqual(restored.agent_id, delegated.agent_id)
+            finally:
+                store.close()
+                if resumed_store is not None:
+                    resumed_store.close()
+
+    def test_api_delegate_resume_and_attach(self) -> None:
+        from nexus_runtime.api import RuntimeAPI
+        from nexus_runtime.research import ResearchCoordinator
+        from nexus_runtime.scheduler import Scheduler
+
+        class Workflow:
+            def submit_workflow(self, specification: dict[str, object]) -> str:
+                return "wf-1"
+
+            def get_status(self, workflow_id: str) -> str:
+                return "COMPLETED"
+
+            def cancel_workflow(self, workflow_id: str) -> None:
+                return None
+
+            def get_outputs(self, workflow_id: str) -> dict[str, object]:
+                return {}
+
+        parent_agent = Agent("Researcher", "Researcher", frozenset({"search.execute"}))
+        delegated = Agent("Analyst", "Analyst", frozenset({"search.execute"}))
+        registry = ToolRegistry(
+            PolicyEngine(
+                {
+                    parent_agent.agent_id: frozenset({"search.execute"}),
+                    delegated.agent_id: frozenset({"search.execute"}),
+                }
+            )
+        )
+        registry.register(SearchTool())
+        agents = AgentExecutor(Model({}), Memory(), registry)
+        api = RuntimeAPI(Scheduler(), agents, ResearchCoordinator(Workflow()))
+
+        api.create_agent(parent_agent)
+        api.create_agent(delegated)
+        parent_run_id = api.create_run(
+            parent_agent.agent_id, "investigation-1", Budget(100, timedelta(minutes=1), 2, 1, 1)
+        )
+        api.start_run(parent_run_id)
+        child_run_id = api.delegate(
+            parent_run_id,
+            delegated.agent_id,
+            "analyze",
+            Budget(50, timedelta(minutes=1), 1, 1, 1),
+        )
+
+        resumed = api.resume_run(child_run_id, subagent_resume=True)
+        self.assertEqual(resumed["agent_id"], delegated.agent_id)
+        self.assertEqual(resumed["depth"], 1)
+        self.assertEqual(resumed["root_run_id"], parent_run_id)
+
+        delegation_id = resumed["delegation_id"]
+        api.attach_delegation_result(parent_run_id, delegation_id, {"summary": "done"})
+        parent_run = agents.get_run(parent_run_id)
+        self.assertEqual(
+            parent_run.outputs["delegations"][delegation_id]["outputs"],
+            {"summary": "done"},
+        )
+        self.assertEqual(parent_run.state, AgentRunState.RUNNING)

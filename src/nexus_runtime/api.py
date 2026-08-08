@@ -5,7 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 from .agent import AgentExecutor, Budget
-from .models import Agent, AgentRunState, DomainError, Investigation, Task
+from .models import (
+    Agent,
+    AgentRunState,
+    DomainError,
+    Investigation,
+    Task,
+    utcnow,
+)
 from .research import ResearchCoordinator
 from .scheduler import Scheduler
 
@@ -26,9 +33,62 @@ class RuntimeAPI:
         agent = self._agents_by_id[agent_id]
         return self._agents.create_run(agent, investigation_id, budget, task_id).run_id
 
+    def delegate(
+        self,
+        parent_run_id: str,
+        agent_id: str,
+        task: str,
+        budget: Budget,
+        *,
+        max_depth: int = 4,
+    ) -> str:
+        agent = self._agents_by_id[agent_id]
+        child = self._agents.build_delegation(
+            parent_run_id, agent, task, budget, max_depth=max_depth
+        )
+        return child.run_id
+
     def get_run(self, run_id: str) -> dict[str, Any] | None:
         checkpoint = self._agents.restore_checkpoint(run_id)
         return checkpoint
+
+    def start_run(self, run_id: str) -> None:
+        self._agents.transition(run_id, AgentRunState.RUNNING, "started via API")
+
+    def resume_run(
+        self,
+        run_id: str,
+        *,
+        subagent_resume: bool = False,
+        max_depth: int = 4,
+    ) -> dict[str, Any]:
+        run = self._agents.resume(
+            run_id, subagent_resume=subagent_resume, max_depth=max_depth
+        )
+        return {
+            "run_id": run.run_id,
+            "agent_id": run.agent_id,
+            "state": run.state.value,
+            "parent_run_id": run.parent_run_id,
+            "root_run_id": run.root_run_id,
+            "delegation_id": run.delegation_id,
+            "depth": run.depth,
+        }
+
+    def attach_delegation_result(
+        self, parent_run_id: str, delegation_id: str, outputs: dict[str, Any]
+    ) -> None:
+        parent = self._agents.get_run(parent_run_id)
+        agent = self._agents.get_delegation_agent(delegation_id)
+        parent.outputs.setdefault("delegations", {})[delegation_id] = {
+            "agent_id": agent.agent_id,
+            "outputs": outputs,
+        }
+        parent.updated_at = utcnow()
+        if parent.state == AgentRunState.RUNNING:
+            self._agents.checkpoint(parent_run_id)
+            return
+        self._agents.transition(parent_run_id, AgentRunState.RUNNING, "delegation completed")
 
     def cancel_run(self, run_id: str) -> None:
         self._agents.transition(run_id, AgentRunState.CANCELLED, "cancelled via API")
