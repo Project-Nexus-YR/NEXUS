@@ -1,0 +1,30 @@
+# ADR 0003: investigation planning is a deterministic orchestration boundary
+
+## Context
+
+NEXUS already has knowledge-gap detection and scoring, a durable Agent Harness, a
+validated task DAG, and a fault-tolerant distributed runtime. The autonomous
+investigation layer needs to decide what work is valuable without duplicating those
+systems or coupling knowledge reasoning to worker internals.
+
+## Decision
+
+Track A uses explicit, serializable domain records from objective through plan. It
+consumes existing `KnowledgeGap` objects and delegates the base gain/cost signal to the
+existing knowledge scorer. Candidate generation, extended scoring, selection,
+dependency validation, information-gain forecasting, and termination are
+deterministic for deterministic inputs.
+
+An `InvestigationPlan` compiles to the existing `TaskDAG` and public
+`DistributedTask` record. AgentRun IDs are supplied explicitly by the integration
+application; planning never creates or executes an agent loop. Because the current
+distributed task schema has no dependency field, the integration layer submits ready
+DAG waves through the public runtime API instead of changing coordinator internals.
+
+## Consequences
+
+Planning decisions are reproducible and explainable, while knowledge retrieval,
+distributed ownership, retries, leases, and AgentRun execution retain their existing
+owners. The integration layer must persist Track A records and coordinate DAG
+readiness with runtime terminal states. A future public batch/DAG submission API can
+replace wave submission without changing the plan domain contract.
