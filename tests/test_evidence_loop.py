@@ -203,6 +203,32 @@ class TestEvidenceEvaluation:
         assert {claim.claim.object for claim in evaluation.claims} == {"London", "Paris"}
         assert all(claim.unresolved_contradiction for claim in evaluation.claims)
 
+    def test_low_quality_conflict_is_resolved_by_rejecting_weak_side(self):
+        london = ClaimStatement("Atlas is in London", "Atlas", "located_in", "London")
+        paris = ClaimStatement("Atlas is in Paris", "Atlas", "located_in", "Paris")
+        evaluation = EvidenceEvaluator().evaluate(
+            EvidenceSet(
+                session_id="session-1",
+                evidence=(
+                    _evidence(claim=london, evidence_id="evidence-london"),
+                    _evidence(
+                        claim=paris,
+                        source_id="source-weak",
+                        source_reference="https://example.test/weak",
+                        excerpt="An anonymous post lists Paris.",
+                        confidence=0.2,
+                        source_quality=0.1,
+                        evidence_id="evidence-paris-weak",
+                    ),
+                ),
+            )
+        )
+        assert evaluation.conflict_ids == ()
+        london_result = next(item for item in evaluation.claims if item.claim.object == "London")
+        paris_result = next(item for item in evaluation.claims if item.claim.object == "Paris")
+        assert not london_result.unresolved_contradiction
+        assert paris_result.low_quality_evidence_ids == ("evidence-paris-weak",)
+
 
 class TestVerification:
     def test_sufficient_independent_evidence_is_confirmed(self):

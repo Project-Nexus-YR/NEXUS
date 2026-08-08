@@ -82,7 +82,8 @@ class EvidenceEvaluator:
     def evaluate(self, evidence_set: EvidenceSet) -> Evaluation:
         fused = self._fusion.fuse(evidence_set)
         duplicate_ids = tuple(item.duplicate_evidence_id for item in fused.duplicates)
-        claims = tuple(self._evaluate_claim(claim, fused) for claim in fused.claims)
+        conflicts = self._unresolved_conflicts(fused)
+        claims = tuple(self._evaluate_claim(claim, fused, conflicts) for claim in fused.claims)
         low_quality_ids = tuple(
             sorted({item for claim in claims for item in claim.low_quality_evidence_ids})
         )
@@ -92,10 +93,15 @@ class EvidenceEvaluator:
             claims=claims,
             duplicate_evidence_ids=duplicate_ids,
             low_quality_evidence_ids=low_quality_ids,
-            conflict_ids=tuple(conflict.conflict_id for conflict in fused.conflicts),
+            conflict_ids=tuple(conflict.conflict_id for conflict in conflicts),
         )
 
-    def _evaluate_claim(self, fused_claim: FusedClaim, fusion: FusionResult) -> ClaimEvaluation:
+    def _evaluate_claim(
+        self,
+        fused_claim: FusedClaim,
+        fusion: FusionResult,
+        unresolved_conflicts: tuple[EvidenceConflict, ...],
+    ) -> ClaimEvaluation:
         claim = fused_claim.claim
         all_evidence = fused_claim.all_evidence
         low_quality = tuple(item for item in all_evidence if not self._acceptable(item))
@@ -104,7 +110,7 @@ class EvidenceEvaluator:
         explicit_contra = tuple(item for item in fused_claim.contradicting if item in accepted)
         conflicts = tuple(
             conflict
-            for conflict in fusion.conflicts
+            for conflict in unresolved_conflicts
             if claim.claim_id in (conflict.claim_a.claim_id, conflict.claim_b.claim_id)
         )
         opposing_ids = {
@@ -117,7 +123,10 @@ class EvidenceEvaluator:
             )
         }
         by_id = {
-            item.evidence_id: item for candidate in fusion.claims for item in candidate.supporting
+            item.evidence_id: item
+            for candidate in fusion.claims
+            for item in candidate.supporting
+            if self._acceptable(item)
         }
         opposing = tuple(by_id[evidence_id] for evidence_id in sorted(opposing_ids))
         contradicting = explicit_contra + opposing
@@ -144,6 +153,34 @@ class EvidenceEvaluator:
             average_source_quality=source_quality,
             independent_source_count=independent_sources,
         )
+
+    def _unresolved_conflicts(self, fusion: FusionResult) -> tuple[EvidenceConflict, ...]:
+        by_id = {item.evidence_id: item for claim in fusion.claims for item in claim.supporting}
+        unresolved: list[EvidenceConflict] = []
+        for conflict in fusion.conflicts:
+            left = tuple(
+                evidence_id
+                for evidence_id in conflict.evidence_a_ids
+                if self._acceptable(by_id[evidence_id])
+            )
+            right = tuple(
+                evidence_id
+                for evidence_id in conflict.evidence_b_ids
+                if self._acceptable(by_id[evidence_id])
+            )
+            if left and right:
+                unresolved.append(
+                    EvidenceConflict(
+                        claim_a=conflict.claim_a,
+                        claim_b=conflict.claim_b,
+                        evidence_a_ids=left,
+                        evidence_b_ids=right,
+                        kind=conflict.kind,
+                        conflict_id=conflict.conflict_id,
+                        detected_at=conflict.detected_at,
+                    )
+                )
+        return tuple(unresolved)
 
     def _acceptable(self, evidence: Evidence) -> bool:
         return (

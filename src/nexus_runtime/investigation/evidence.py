@@ -45,8 +45,14 @@ class ClaimStatement:
     claim_id: str = field(default_factory=lambda: new_id("claim"))
 
     def __post_init__(self) -> None:
-        for name in ("text", "subject", "predicate", "object", "claim_id"):
-            _required(str(getattr(self, name)), name)
+        for value, name in (
+            (self.text, "text"),
+            (self.subject, "subject"),
+            (self.predicate, "predicate"),
+            (self.object, "object"),
+            (self.claim_id, "claim_id"),
+        ):
+            _required(value, name)
 
     @property
     def identity(self) -> tuple[str, str, str]:

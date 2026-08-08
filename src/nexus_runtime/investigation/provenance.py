@@ -45,7 +45,9 @@ class EvidenceProvenance:
     def __post_init__(self) -> None:
         values = self.to_dict()
         missing = [
-            name for name in (*_LINEAGE_FIELDS, "source_reference") if not values[name].strip()
+            name
+            for name in (*_LINEAGE_FIELDS, "source_reference")
+            if not isinstance(values[name], str) or not values[name].strip()
         ]
         if missing:
             raise ValueError(f"incomplete evidence provenance: {', '.join(missing)}")
