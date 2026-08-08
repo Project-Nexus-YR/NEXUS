@@ -17,7 +17,7 @@ sequenceDiagram
     TaskStore-->>Worker: attempt_id + lease_id
     Worker->>Coordinator: start(lease_id)
     Worker->>Coordinator: heartbeat + renew
-    Worker->>Harness: execute_or_resume(run_id)
+    Worker->>Harness: execute_or_resume(HarnessExecutionContext)
     Worker->>Coordinator: complete(lease_id)
     Coordinator->>TaskStore: atomic completion
 ```
