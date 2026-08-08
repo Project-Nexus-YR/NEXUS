@@ -1,5 +1,13 @@
 # ADR 0003: investigation planning is a deterministic orchestration boundary
 
+## Status
+
+Superseded in part: the legacy `TaskDAG` was removed during the architectural
+consolidation. The decision that planning never creates or executes an agent loop, and
+that `InvestigationPlan` compiles to public `DistributedTask` records with explicit
+AgentRun IDs, remains in force. Dependency-ready waves are submitted by
+`PlanExecutionController` through `RuntimeApplication.submit_task`.
+
 ## Context
 
 NEXUS already has knowledge-gap detection and scoring, a durable Agent Harness, a

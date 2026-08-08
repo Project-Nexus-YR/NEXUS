@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted for Phase 4.
+Accepted for Phase 4. Superseded in part: plans no longer compile through the legacy
+`TaskDAG` (removed in the architectural consolidation). `PlanExecutionController`
+submits dependency-ready waves from the plan's `to_distributed_tasks` contract, and
+the remainder of this decision is unchanged.
 
 ## Context
 

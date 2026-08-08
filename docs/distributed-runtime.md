@@ -16,8 +16,7 @@ flowchart TD
     W2["Worker B"] --> C
     W1 --> H["Agent Harness"]
     W2 --> H
-    H --> KS["KnowledgeService"]
-    KS --> K["nexus_knowledge"]
+    H --> K["nexus_knowledge"]
 ```
 
 ## Ownership

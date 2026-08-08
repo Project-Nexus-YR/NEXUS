@@ -1,7 +1,7 @@
 # Runtime lifecycle
 
 ```text
-goal -> gap discovery -> investigation -> hypothesis -> task DAG
+goal -> gap discovery -> investigation -> hypothesis -> distributed task plan
      -> leased execution -> evidence -> experiment -> critique -> synthesis
      -> knowledge-update proposal -> verification by KnowledgeService
 ```
@@ -15,3 +15,7 @@ orchestration call.
 Structured `HypothesisProposal` and `KnowledgeUpdateProposal` records reject missing
 fields and invalid confidence. The runtime only proposes updates; KnowledgeService
 verification is required before a commit.
+
+Distributed tasks own leases, retries, deadlines, and recovery. The investigation
+layer submits dependency-ready waves through `RuntimeApplication`; it never assigns a
+worker or executes an agent itself.
