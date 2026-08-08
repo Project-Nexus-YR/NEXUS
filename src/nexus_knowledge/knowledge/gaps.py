@@ -175,9 +175,7 @@ class GapEngine:
     def _contradictions(self) -> list[KnowledgeGap]:
         gaps: list[KnowledgeGap] = []
         for contradiction in self._repository.contradictions.all():
-            affected_claims = [
-                c for c in (contradiction.claim_a_id, contradiction.claim_b_id) if c
-            ]
+            affected_claims = [c for c in (contradiction.claim_a_id, contradiction.claim_b_id) if c]
             entities = self._entities_for_contradiction(contradiction)
             gap = KnowledgeGap(
                 kind=GapKind.CONTRADICTION,
@@ -339,7 +337,7 @@ class GapEngine:
             direct.add((relation.object_id, relation.subject_id))
 
         candidate_scores: dict[tuple[str, str], int] = defaultdict(int)
-        for hub, neighbors in adjacency.items():
+        for _, neighbors in adjacency.items():
             ordered = sorted(neighbors)
             for i in range(len(ordered)):
                 for j in range(i + 1, len(ordered)):

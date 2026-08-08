@@ -70,7 +70,10 @@ class TestInvestigationScorer:
         scored = InvestigationScorer().score_gaps([gap])[0]
         investigation = scored.investigation
         assert investigation.score == scored.score
-        assert investigation.expected_information_gain == scored.components["expected_information_gain"]
+        assert (
+            investigation.expected_information_gain
+            == scored.components["expected_information_gain"]
+        )
 
     def test_scores_sort_descending(self):
         gaps = [

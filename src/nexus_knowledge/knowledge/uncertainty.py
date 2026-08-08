@@ -16,12 +16,11 @@ Uncertainty is never represented purely as an LLM-generated sentence.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from ..domain.claim import Claim
 from ..domain.common import VerificationState
-from ..domain.source import Source
 from ..port.repository import EvidenceRepository, SourceRepository
 
 __all__ = ["UncertaintyWeights", "UncertaintyAssessment", "UncertaintyModel"]
@@ -124,9 +123,7 @@ class UncertaintyModel:
             components=components,
         )
 
-    def _source_signals(
-        self, claim: Claim, sources: SourceRepository
-    ) -> tuple[float, float]:
+    def _source_signals(self, claim: Claim, sources: SourceRepository) -> tuple[float, float]:
         """Return ``(mean_source_quality, normalized_diversity)``."""
         source_ids = set(claim.source_ids)
         if not source_ids:
@@ -148,7 +145,7 @@ class UncertaintyModel:
         latest = self._latest_timestamp(claim)
         if latest is None:
             return 0.5  # neutral when timing is unknown
-        age_days = max(0.0, (datetime.now(timezone.utc) - latest).total_seconds() / 86400.0)
+        age_days = max(0.0, (datetime.now(UTC) - latest).total_seconds() / 86400.0)
         return float(math.exp(-age_days / w.recency_half_life_days))
 
     @staticmethod
@@ -169,7 +166,7 @@ class UncertaintyModel:
                 value = datetime.strptime(text, fmt)
             except ValueError:
                 continue
-            return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+            return value.replace(tzinfo=UTC) if value.tzinfo is None else value
         return None
 
     def _verification_state(
@@ -181,7 +178,9 @@ class UncertaintyModel:
         recency: float,
     ) -> VerificationState:
         if contra_count > 0 and contra_count >= support_count:
-            return VerificationState.REFUTED if support_count == 0 else VerificationState.CONTRADICTED
+            return (
+                VerificationState.REFUTED if support_count == 0 else VerificationState.CONTRADICTED
+            )
         if support_count > 0 and confidence >= 0.7:
             return VerificationState.VERIFIED
         if support_count > 0:

@@ -154,9 +154,7 @@ class InMemoryGraph(KnowledgeGraph):
             edges: list[Edge] = []
             weight = 1.0
             for i in range(len(nodes) - 1):
-                edges_on_hop = [
-                    e for e in self._out_edges(nodes[i]) if e.object_id == nodes[i + 1]
-                ]
+                edges_on_hop = [e for e in self._out_edges(nodes[i]) if e.object_id == nodes[i + 1]]
                 if not edges_on_hop:
                     break
                 edge = Edge.from_relation(edges_on_hop[0])
@@ -191,7 +189,9 @@ class InMemoryGraph(KnowledgeGraph):
             adj[relation.subject_id].append((relation.object_id, float(relation.confidence)))
         return adj
 
-    def pagerank(self, damping: float = 0.85, max_iter: int = 100, tol: float = 1e-6) -> dict[str, float]:
+    def pagerank(
+        self, damping: float = 0.85, max_iter: int = 100, tol: float = 1e-6
+    ) -> dict[str, float]:
         return algorithms.pagerank(self._adjacency(), damping=damping, max_iter=max_iter, tol=tol)
 
     def personalized_pagerank(

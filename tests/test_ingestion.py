@@ -1,7 +1,5 @@
 """Ingestion adapter, normalization and pipeline tests."""
 
-import pytest
-
 from nexus_knowledge.domain.document import Document
 from nexus_knowledge.domain.source import Source, SourceKind
 from nexus_knowledge.ingestion.adapters import (
@@ -103,7 +101,9 @@ class TestRecursiveChunker:
 
     def test_overlap_between_consecutive(self):
         chunker = RecursiveChunker(max_chars=10, overlap=3)
-        document = Document(source_id="s", title="t", content_type="text", text="abcd efgh ijkl mnop")
+        document = Document(
+            source_id="s", title="t", content_type="text", text="abcd efgh ijkl mnop"
+        )
         chunks = chunker.chunk(document)
         if len(chunks) > 1:
             assert chunks[0].text.endswith(chunks[1].text[:3])

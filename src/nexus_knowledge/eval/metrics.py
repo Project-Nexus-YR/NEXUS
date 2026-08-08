@@ -80,7 +80,9 @@ def entity_recall(found_entities: set[str], relevant_entities: set[str]) -> floa
     return len(found_entities & relevant_entities) / len(relevant_entities)
 
 
-def relation_recall(found_relations: set[tuple[str, str, str]], relevant_relations: set[tuple[str, str, str]]) -> float:
+def relation_recall(
+    found_relations: set[tuple[str, str, str]], relevant_relations: set[tuple[str, str, str]]
+) -> float:
     if not relevant_relations:
         return 0.0
     return len(found_relations & relevant_relations) / len(relevant_relations)
@@ -102,7 +104,7 @@ def evidence_precision(selected_evidence: list[str], relevant_evidence: set[str]
 def claim_accuracy(predictions: list[bool], labels: list[bool]) -> float:
     if not labels:
         return 0.0
-    correct = sum(1 for p, l in zip(predictions, labels) if p == l)
+    correct = sum(1 for pred, label in zip(predictions, labels, strict=True) if pred == label)
     return correct / len(labels)
 
 
@@ -117,7 +119,7 @@ def calibration_error(predictions: list[float], labels: list[bool]) -> float:
     if not labels:
         return 0.0
     bins: list[tuple[list[float], list[bool]]] = [([], []) for _ in range(10)]
-    for pred, label in zip(predictions, labels):
+    for pred, label in zip(predictions, labels, strict=True):
         index = min(9, max(0, int(pred * 10)))
         bins[index][0].append(pred)
         bins[index][1].append(label)
@@ -127,7 +129,7 @@ def calibration_error(predictions: list[float], labels: list[bool]) -> float:
         if not preds:
             continue
         confidence = sum(preds) / len(preds)
-        accuracy = sum(1 for l in labels_ if l) / len(labels_)
+        accuracy = sum(1 for label in labels_ if label) / len(labels_)
         weight_total += len(preds)
         error += len(preds) * abs(confidence - accuracy)
     return error / weight_total if weight_total else 0.0

@@ -3,7 +3,6 @@
 import pytest
 
 from nexus_knowledge.domain.document import Chunk
-from nexus_knowledge.port.reranker import RerankCandidate
 from nexus_knowledge.retrieval.entity import EntityIndex
 from nexus_knowledge.retrieval.fusion import ReciprocalRankFusion
 from nexus_knowledge.retrieval.hybrid import HybridRetriever

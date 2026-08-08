@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..port.embeddings import Embedding
-from ..port.vector_store import VectorHit, VectorStore
+from ..port.vector_store import VectorHit
 
 __all__ = ["LocalVectorStore"]
 
@@ -54,7 +54,10 @@ class LocalVectorStore:
             score = float(np.dot(query, candidate))
             scored.append((score, object_id, dict(embedding.metadata)))
         scored.sort(key=lambda item: item[0], reverse=True)
-        return [VectorHit(object_id=oid, score=score, metadata=meta) for score, oid, meta in scored[:top_k]]
+        return [
+            VectorHit(object_id=oid, score=score, metadata=meta)
+            for score, oid, meta in scored[:top_k]
+        ]
 
     def get(self, object_id: str) -> Embedding | None:
         return self._entries.get(object_id)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from ..domain.common import now_iso
-from ..port.embeddings import Embedding, EmbeddingProvider
+from ..port.embeddings import Embedding
 from .hashing import FeatureHashEmbedder
 
 __all__ = ["LocalEmbeddingProvider"]
@@ -49,6 +49,5 @@ class LocalEmbeddingProvider:
 
     def embed_batch(self, texts: Sequence[str], object_ids: Sequence[str]) -> list[Embedding]:
         return [
-            self.embed(text, object_id)
-            for text, object_id in zip(texts, object_ids)
+            self.embed(text, object_id) for text, object_id in zip(texts, object_ids, strict=True)
         ]

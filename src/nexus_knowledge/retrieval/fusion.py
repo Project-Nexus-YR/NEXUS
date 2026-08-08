@@ -26,9 +26,9 @@ class ReciprocalRankFusion:
         contributions: dict[str, dict[str, float]] = {}
         for method_results in results:
             for rank, hit in enumerate(method_results):
-                contributions.setdefault(hit.object_id, {})[hit.method] = (
-                    self._weights.get(hit.method, 1.0) / (self.k + rank)
-                )
+                contributions.setdefault(hit.object_id, {})[hit.method] = self._weights.get(
+                    hit.method, 1.0
+                ) / (self.k + rank)
         fused = []
         for object_id, by_method in contributions.items():
             score = sum(by_method.values())

@@ -82,7 +82,7 @@ class TestBenchmarks:
         report = run_benchmarks().to_dict()
         assert set(report) == {"graph", "knowledge", "retrieval"}
         assert set(report["retrieval"]) == {"lexical", "vector", "graph", "hybrid"}
-        for config, metrics_dict in report["retrieval"].items():
+        for _, metrics_dict in report["retrieval"].items():
             assert set(metrics_dict) == {"recall_at_5", "precision_at_5", "mrr", "ndcg_at_5"}
 
     def test_graph_metrics_present(self):
@@ -91,4 +91,8 @@ class TestBenchmarks:
 
     def test_knowledge_metrics_present(self):
         report = run_benchmarks().to_dict()
-        assert set(report["knowledge"]) == {"claim_accuracy", "calibration_error", "provenance_correctness"}
+        assert set(report["knowledge"]) == {
+            "claim_accuracy",
+            "calibration_error",
+            "provenance_correctness",
+        }

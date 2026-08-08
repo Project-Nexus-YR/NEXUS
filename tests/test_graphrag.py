@@ -1,11 +1,5 @@
 """GraphRAG engine tests."""
 
-import pytest
-
-from nexus_knowledge.domain.claim import Claim, Evidence
-from nexus_knowledge.domain.entity import Entity, Relation
-from nexus_knowledge.retrieval.graphrag import EvidenceGraph
-
 
 class TestEvidenceGraph:
     def test_query_grounds_entities(self, ingested_engine):

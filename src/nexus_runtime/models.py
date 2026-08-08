@@ -223,13 +223,9 @@ def run_from_checkpoint(payload: dict[str, Any]) -> AgentRun:
         if isinstance(item, dict)
     ]
     tool_calls = [
-        _tool_call_from_dict(item)
-        for item in raw.get("tool_calls", [])
-        if isinstance(item, dict)
+        _tool_call_from_dict(item) for item in raw.get("tool_calls", []) if isinstance(item, dict)
     ]
-    steps = [
-        _agent_step_from_dict(item) for item in raw.get("steps", []) if isinstance(item, dict)
-    ]
+    steps = [_agent_step_from_dict(item) for item in raw.get("steps", []) if isinstance(item, dict)]
     return AgentRun(
         agent_id=str(raw["agent_id"]),
         investigation_id=str(raw["investigation_id"]),

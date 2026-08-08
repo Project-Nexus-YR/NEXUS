@@ -6,7 +6,7 @@ learned reranker can be plugged in later through the ``Reranker`` port.
 
 from __future__ import annotations
 
-from ..port.reranker import RerankCandidate, Reranker
+from ..port.reranker import RerankCandidate
 
 __all__ = ["DeterministicReranker"]
 

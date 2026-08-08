@@ -7,8 +7,9 @@ local hashing, ...). The local deterministic implementation lives in
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Protocol, Sequence
+from typing import Any, Protocol
 
 from ..domain.common import now_iso
 from ..domain.ids import stable_id

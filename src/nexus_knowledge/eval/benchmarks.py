@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from ..domain.source import Source, SourceKind
 from ..service.factory import Adapters, create_engine
 from . import metrics
-from .fixtures import Corpus, QueryJudgement, build_corpus
+from .fixtures import Corpus, build_corpus
 
 __all__ = ["BenchmarkRunner", "run_benchmarks"]
 
@@ -69,9 +69,7 @@ class BenchmarkRunner:
 
     def _ingest(self, engine) -> None:
         for reference, text in self.corpus.documents:
-            engine.ingest(
-                Source(title=reference, kind=SourceKind.TEXT, reference=reference), text
-            )
+            engine.ingest(Source(title=reference, kind=SourceKind.TEXT, reference=reference), text)
 
     def _chunk_by_document(self, engine) -> dict[str, list[str]]:
         mapping: dict[str, list[str]] = {}
@@ -152,7 +150,10 @@ class BenchmarkRunner:
                     (
                         d
                         for d in engine.repository.documents.all()
-                        if any(c.id == item.chunk_id for c in engine.repository.chunks.by_document(d.id))
+                        if any(
+                            c.id == item.chunk_id
+                            for c in engine.repository.chunks.by_document(d.id)
+                        )
                     ),
                     None,
                 )
@@ -184,8 +185,12 @@ class BenchmarkRunner:
             subject_id = entity_by_name.get(subject.lower())
             object_id = entity_by_name.get(object_.lower())
             claim = engine.propose_claim(
-                text, subject, predicate, object_,
-                confidence=0.5, source_ref="label-probe",
+                text,
+                subject,
+                predicate,
+                object_,
+                confidence=0.5,
+                source_ref="label-probe",
             )
             if subject_id is None or object_id is None:
                 supported = False
@@ -220,12 +225,8 @@ class BenchmarkRunner:
             confidences.append(confidence)
         return {
             "claim_accuracy": round(metrics.claim_accuracy(predictions, labels), 4),
-            "calibration_error": round(
-                metrics.calibration_error(confidences, labels), 4
-            ),
-            "provenance_correctness": round(
-                metrics.provenance_correctness(provenance_ok), 4
-            ),
+            "calibration_error": round(metrics.calibration_error(confidences, labels), 4),
+            "provenance_correctness": round(metrics.provenance_correctness(provenance_ok), 4),
         }
 
 

@@ -2,9 +2,8 @@
 
 import pytest
 
-from nexus_knowledge.domain.claim import Claim, Evidence
+from nexus_knowledge.domain.claim import Claim
 from nexus_knowledge.domain.common import Confidence, VerificationState
-from nexus_knowledge.domain.document import Document, Span
 from nexus_knowledge.domain.entity import Entity, Relation
 from nexus_knowledge.domain.source import Source, SourceKind
 from nexus_knowledge.service.engine import KnowledgeUpdate
@@ -90,9 +89,7 @@ class TestClaims:
             ingested_engine.verify_claim("claim_does_not_exist")
 
     def test_propose_with_source_ref(self, ingested_engine):
-        claim = ingested_engine.propose_claim(
-            "x", "a", "p", "b", source_ref="probe/alpha"
-        )
+        claim = ingested_engine.propose_claim("x", "a", "p", "b", source_ref="probe/alpha")
         assert len(claim.source_ids) == 1
         again = ingested_engine.propose_claim("y", "a", "p", "c", source_ref="probe/alpha")
         assert again.source_ids == claim.source_ids  # source reused
@@ -100,9 +97,7 @@ class TestClaims:
 
 class TestProvenance:
     def test_provenance_resolution(self, ingested_engine):
-        claim = next(
-            c for c in ingested_engine.repository.claims.all() if c.provenance
-        )
+        claim = next(c for c in ingested_engine.repository.claims.all() if c.provenance)
         response = ingested_engine.provenance(claim.id)
         assert response.claim_id == claim.id
         assert response.claim_text
@@ -119,9 +114,17 @@ class TestCommitUpdate:
     def test_atomic_commit(self, ingested_engine):
         entity = Entity(name="Grace Hopper", id="grace")
         relation = Relation(
-            subject_id="grace", predicate="works_at", object_id="acme_id", confidence=Confidence(0.8)
+            subject_id="grace",
+            predicate="works_at",
+            object_id="acme_id",
+            confidence=Confidence(0.8),
         )
-        claim = Claim(text="Grace Hopper works at Acme Corp", subject="Grace Hopper", predicate="works_at", object="Acme Corp")
+        claim = Claim(
+            text="Grace Hopper works at Acme Corp",
+            subject="Grace Hopper",
+            predicate="works_at",
+            object="Acme Corp",
+        )
         update = KnowledgeUpdate(entities=[entity], relations=[relation], claims=[claim])
         receipt = ingested_engine.commit_knowledge_update(update)
         assert receipt.accepted == 3

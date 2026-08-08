@@ -31,9 +31,7 @@ class EntityRetriever:
                 if relation is None:
                     continue
                 for chunk_id in relation.provenance:
-                    chunk_scores[chunk_id] = (
-                        chunk_scores.get(chunk_id, 0.0) + edge.weight
-                    )
+                    chunk_scores[chunk_id] = chunk_scores.get(chunk_id, 0.0) + edge.weight
         ranked = sorted(chunk_scores.items(), key=lambda item: item[1], reverse=True)
         return [
             RetrievalHit(object_id=chunk_id, score=score, method="entity")

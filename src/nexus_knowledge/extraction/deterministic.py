@@ -167,7 +167,9 @@ class PatternRelationExtractor:
         sentence_start, sentence_end = _sentence_bounds(text, position)
         if before:
             candidates = [
-                e for e in entities if e.span is not None
+                e
+                for e in entities
+                if e.span is not None
                 and e.span.start >= sentence_start
                 and e.span.end <= min(position, sentence_end)
             ]
@@ -175,7 +177,9 @@ class PatternRelationExtractor:
                 return None
             return max(candidates, key=lambda e: e.span.end)
         candidates = [
-            e for e in entities if e.span is not None
+            e
+            for e in entities
+            if e.span is not None
             and e.span.start >= max(position, sentence_start)
             and e.span.end <= sentence_end
         ]

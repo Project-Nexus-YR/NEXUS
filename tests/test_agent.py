@@ -85,9 +85,7 @@ class AgentTests(unittest.TestCase):
         parent = next(iter(executor._runs.values()))
         budget = Budget(50, timedelta(minutes=1), 1, 1, 1)
 
-        child = executor.build_delegation(
-            parent.run_id, delegated, "analyze the evidence", budget
-        )
+        child = executor.build_delegation(parent.run_id, delegated, "analyze the evidence", budget)
 
         self.assertIsNotNone(child.delegation_id)
         self.assertEqual(child.parent_run_id, parent.run_id)

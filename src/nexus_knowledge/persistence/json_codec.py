@@ -9,13 +9,13 @@ in the vector store and are not part of the domain snapshot.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, is_dataclass
+from dataclasses import is_dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from ..domain.claim import Claim, Evidence
-from ..domain.common import Confidence, VerificationState
+from ..domain.common import Confidence
 from ..domain.contradiction import Contradiction
 from ..domain.document import Chunk, Document, Span
 from ..domain.entity import Entity, Relation

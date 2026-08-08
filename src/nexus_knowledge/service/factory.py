@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..domain.knowledge_gap import KnowledgeGap
 from ..embedding.local_store import LocalVectorStore
 from ..embedding.provider import LocalEmbeddingProvider
 from ..extraction.deterministic import GazetteerEntityExtractor, PatternRelationExtractor
