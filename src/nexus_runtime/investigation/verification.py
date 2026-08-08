@@ -5,11 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from nexus_runtime.models import new_id, utcnow
 
 from .evaluation import ClaimEvaluation, Evaluation
-from .evidence import ClaimStatement
+from .evidence import (
+    ClaimStatement,
+    _parse_timestamp,
+    _persisted_bool,
+    _persisted_float,
+    _persisted_string,
+    _persisted_strings,
+)
 
 
 class EpistemicStatus(StrEnum):
@@ -53,6 +61,50 @@ class VerificationDecision:
     unresolved_conflict_ids: tuple[str, ...]
     reasons: tuple[str, ...]
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "claim": self.claim.to_dict(),
+            "status": self.status.value,
+            "eligible_for_update": self.eligible_for_update,
+            "confidence": self.confidence,
+            "supporting_evidence_ids": list(self.supporting_evidence_ids),
+            "contradicting_evidence_ids": list(self.contradicting_evidence_ids),
+            "unresolved_conflict_ids": list(self.unresolved_conflict_ids),
+            "reasons": list(self.reasons),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> VerificationDecision:
+        claim = payload.get("claim")
+        sequence_fields = (
+            "supporting_evidence_ids",
+            "contradicting_evidence_ids",
+            "unresolved_conflict_ids",
+            "reasons",
+        )
+        if not isinstance(claim, dict) or any(
+            not isinstance(payload.get(name), list) for name in sequence_fields
+        ):
+            raise ValueError("malformed verification decision")
+        status = payload.get("status")
+        if not isinstance(status, str):
+            raise ValueError("malformed verification decision")
+        try:
+            return cls(
+                claim=ClaimStatement.from_dict(claim),
+                status=EpistemicStatus(status),
+                eligible_for_update=_persisted_bool(payload, "eligible_for_update"),
+                confidence=_persisted_float(payload, "confidence"),
+                supporting_evidence_ids=_persisted_strings(payload, "supporting_evidence_ids"),
+                contradicting_evidence_ids=_persisted_strings(
+                    payload, "contradicting_evidence_ids"
+                ),
+                unresolved_conflict_ids=_persisted_strings(payload, "unresolved_conflict_ids"),
+                reasons=_persisted_strings(payload, "reasons"),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("malformed verification decision") from exc
+
 
 @dataclass(frozen=True, slots=True)
 class VerificationReport:
@@ -65,6 +117,31 @@ class VerificationReport:
     @property
     def eligible_claims(self) -> tuple[VerificationDecision, ...]:
         return tuple(decision for decision in self.decisions if decision.eligible_for_update)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "verification_id": self.verification_id,
+            "session_id": self.session_id,
+            "evaluation_id": self.evaluation_id,
+            "decisions": [item.to_dict() for item in self.decisions],
+            "verified_at": self.verified_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> VerificationReport:
+        decisions = payload.get("decisions")
+        if not isinstance(decisions, list) or any(not isinstance(item, dict) for item in decisions):
+            raise ValueError("malformed verification report")
+        try:
+            return cls(
+                verification_id=_persisted_string(payload, "verification_id"),
+                session_id=_persisted_string(payload, "session_id"),
+                evaluation_id=_persisted_string(payload, "evaluation_id"),
+                decisions=tuple(VerificationDecision.from_dict(item) for item in decisions),
+                verified_at=_parse_timestamp(payload["verified_at"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("malformed verification report") from exc
 
 
 class ClaimVerifier:

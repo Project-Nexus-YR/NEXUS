@@ -30,3 +30,8 @@ knowledge subsystem's chunk, document, source, and evidence identifiers.
 The knowledge update adapter never writes repositories or graph storage. It builds the
 existing `KnowledgeUpdate` service contract and submits it with
 `KnowledgeEngine.commit_knowledge_update`.
+
+Before submission, `KnowledgeEngine.validate_evidence_provenance` verifies that the
+referenced source, document, and chunk exist, form the declared source → document →
+chunk chain, and that the source reference matches. A structurally complete but
+dangling lineage is rejected rather than being written as trusted knowledge.

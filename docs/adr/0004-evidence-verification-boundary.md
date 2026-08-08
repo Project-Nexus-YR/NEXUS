@@ -1,4 +1,4 @@
-# ADR 0003: verify evidence before promoting knowledge
+# ADR 0004: verify evidence before promoting knowledge
 
 ## Context
 

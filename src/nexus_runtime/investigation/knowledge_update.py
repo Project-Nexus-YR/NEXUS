@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 
 from nexus_knowledge.domain.claim import (
     Claim,
@@ -22,7 +22,13 @@ from nexus_knowledge.knowledge.uncertainty import UncertaintyAssessment
 from nexus_knowledge.service.engine import KnowledgeUpdate, KnowledgeUpdateReceipt
 from nexus_runtime.models import new_id, utcnow
 
-from .evidence import Evidence, EvidenceSet
+from .evidence import (
+    Evidence,
+    EvidenceSet,
+    _parse_timestamp,
+    _persisted_string,
+    _persisted_strings,
+)
 from .provenance import EvidenceProvenance
 from .verification import VerificationDecision, VerificationReport
 
@@ -35,6 +41,14 @@ class KnowledgeUpdatePort(Protocol):
     def detect_contradictions(self) -> list[Contradiction]: ...
 
     def verify_claim(self, claim_id: str) -> UncertaintyAssessment: ...
+
+    def validate_evidence_provenance(
+        self,
+        source_id: str,
+        document_id: str,
+        chunk_id: str,
+        source_reference: str,
+    ) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +63,25 @@ class PreparedClaim:
             raise ValueError("prepared claim evidence does not match verification decision")
         if not self.decision.eligible_for_update:
             raise ValueError("ineligible claim cannot be prepared for knowledge update")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "decision": self.decision.to_dict(),
+            "evidence": [item.to_dict() for item in self.evidence],
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> PreparedClaim:
+        decision = payload.get("decision")
+        evidence = payload.get("evidence")
+        if not isinstance(decision, dict) or not isinstance(evidence, list):
+            raise ValueError("malformed prepared claim")
+        if any(not isinstance(item, dict) for item in evidence):
+            raise ValueError("malformed prepared claim evidence")
+        return cls(
+            decision=VerificationDecision.from_dict(decision),
+            evidence=tuple(Evidence.from_dict(item) for item in evidence),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +102,31 @@ class InvestigationKnowledgeUpdate:
     def provenance(self) -> tuple[EvidenceProvenance, ...]:
         return tuple(item.provenance for claim in self.claims for item in claim.evidence)
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "update_id": self.update_id,
+            "session_id": self.session_id,
+            "verification_id": self.verification_id,
+            "claims": [item.to_dict() for item in self.claims],
+            "created_at": self.created_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> InvestigationKnowledgeUpdate:
+        claims = payload.get("claims")
+        if not isinstance(claims, list) or any(not isinstance(item, dict) for item in claims):
+            raise ValueError("malformed investigation knowledge update")
+        try:
+            return cls(
+                update_id=_persisted_string(payload, "update_id"),
+                session_id=_persisted_string(payload, "session_id"),
+                verification_id=_persisted_string(payload, "verification_id"),
+                claims=tuple(PreparedClaim.from_dict(item) for item in claims),
+                created_at=_parse_timestamp(payload["created_at"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("malformed investigation knowledge update") from exc
+
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeUpdateResult:
@@ -84,6 +142,58 @@ class KnowledgeUpdateResult:
     @property
     def fully_applied(self) -> bool:
         return self.rejected_records == 0 and not self.unresolved_contradiction_ids
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "update_id": self.update_id,
+            "accepted_records": self.accepted_records,
+            "rejected_records": self.rejected_records,
+            "errors": list(self.errors),
+            "committed_claim_ids": list(self.committed_claim_ids),
+            "unresolved_contradiction_ids": list(self.unresolved_contradiction_ids),
+            "verification_states": dict(self.verification_states),
+            "applied_at": self.applied_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> KnowledgeUpdateResult:
+        sequence_fields = (
+            "errors",
+            "committed_claim_ids",
+            "unresolved_contradiction_ids",
+        )
+        states = payload.get("verification_states")
+        invalid_sequences = any(not isinstance(payload.get(name), list) for name in sequence_fields)
+        if invalid_sequences or not isinstance(states, dict):
+            raise ValueError("malformed knowledge update result")
+        accepted = payload.get("accepted_records")
+        rejected = payload.get("rejected_records")
+        if (
+            isinstance(accepted, bool)
+            or not isinstance(accepted, int)
+            or isinstance(rejected, bool)
+            or not isinstance(rejected, int)
+        ):
+            raise ValueError("malformed knowledge update result")
+        if any(
+            not isinstance(key, str) or not isinstance(value, str) for key, value in states.items()
+        ):
+            raise ValueError("malformed knowledge update result")
+        try:
+            return cls(
+                update_id=_persisted_string(payload, "update_id"),
+                accepted_records=accepted,
+                rejected_records=rejected,
+                errors=_persisted_strings(payload, "errors"),
+                committed_claim_ids=_persisted_strings(payload, "committed_claim_ids"),
+                unresolved_contradiction_ids=_persisted_strings(
+                    payload, "unresolved_contradiction_ids"
+                ),
+                verification_states=dict(states),
+                applied_at=_parse_timestamp(payload["applied_at"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("malformed knowledge update result") from exc
 
 
 class KnowledgeUpdateIntegrator:
@@ -119,6 +229,20 @@ class KnowledgeUpdateIntegrator:
             evidence = tuple(evidence_by_id[item] for item in decision.supporting_evidence_ids)
             if any(not item.provenance.is_complete for item in evidence):
                 raise ValueError("knowledge update requires complete evidence provenance")
+            invalid = [
+                item.evidence_id
+                for item in evidence
+                if not self._knowledge.validate_evidence_provenance(
+                    item.provenance.source_id,
+                    item.provenance.document_id,
+                    item.provenance.chunk_id,
+                    item.provenance.source_reference,
+                )
+            ]
+            if invalid:
+                raise ValueError(
+                    "knowledge update provenance does not resolve: " + ", ".join(invalid)
+                )
             prepared.append(PreparedClaim(decision=decision, evidence=evidence))
         return InvestigationKnowledgeUpdate(
             session_id=report.session_id,

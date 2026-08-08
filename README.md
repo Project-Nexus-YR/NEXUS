@@ -93,6 +93,25 @@ The Phase 3 milestone provides a provider-neutral distributed execution layer:
 The public service boundary is intentionally `KnowledgeService`; NEXUS does not read
 the knowledge engine's database.
 
+### Autonomous investigation (Phase 4)
+
+Phase 4 closes the epistemic loop: structured objectives are observed against current
+knowledge, measurable gaps become scored and budget-aware investigation plans, those
+plans execute through the distributed Agent Harness, and provenance-complete evidence
+is fused, verified, and applied through the knowledge service. Progress is measured
+before another bounded iteration is considered.
+
+```bash
+nexus-research create "What is Acme's verified status?" \
+  --criterion "two independent sources support the answer"
+nexus-research status SESSION_ID
+nexus-research explain SESSION_ID
+nexus-investigation-bench
+```
+
+See [autonomous investigation](docs/autonomous-investigation.md) and the
+[closed epistemic loop](docs/autonomous-loop.md).
+
 **Quick start**
 
 ```bash

@@ -38,10 +38,18 @@ def _validate_json(value: object, field_name: str) -> None:
         raise DomainError(f"{field_name} must be JSON serializable") from exc
 
 
+def _required_string(value: object, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise DomainError(f"{field_name} must be a string")
+    return value
+
+
 def _string_tuple(value: object, field_name: str, *, allow_empty: bool = True) -> tuple[str, ...]:
     if not isinstance(value, (list, tuple)):
         raise DomainError(f"{field_name} must be a sequence of strings")
-    result = tuple(str(item).strip() for item in value)
+    if any(not isinstance(item, str) for item in value):
+        raise DomainError(f"{field_name} must be a sequence of strings")
+    result = tuple(item.strip() for item in value)
     if any(not item for item in result):
         raise DomainError(f"{field_name} cannot contain empty values")
     if not allow_empty and not result:
@@ -111,8 +119,8 @@ class ResearchObjective:
         if not isinstance(metadata, dict):
             raise DomainError("objective metadata must be an object")
         return cls(
-            objective_id=str(payload["objective_id"]),
-            question=str(payload["question"]),
+            objective_id=_required_string(payload["objective_id"], "objective_id"),
+            question=_required_string(payload["question"], "question"),
             scope=_string_tuple(payload["scope"], "scope"),
             constraints=_string_tuple(payload["constraints"], "constraints"),
             success_criteria=_string_tuple(

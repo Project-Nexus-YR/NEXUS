@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from threading import Event as ThreadEvent
 from threading import Thread
-from typing import Protocol
+from types import MappingProxyType
+from typing import Any, Protocol
 
 from ..models import DomainError
 from .coordinator import Coordinator
@@ -30,13 +31,25 @@ class HarnessOutcome:
     error: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class HarnessExecutionContext:
+    """Immutable lineage supplied by the worker to the Agent Harness."""
+
+    run_id: str
+    correlation_id: str
+    task_id: str
+    attempt_id: str
+    lease_id: str
+    worker_id: str
+    metadata: Mapping[str, Any]
+
+
 class Harness(Protocol):
     """Small integration port; implementations own all AgentRun execution details."""
 
     def execute_or_resume(
         self,
-        run_id: str,
-        correlation_id: str,
+        context: HarnessExecutionContext,
         cancellation_requested: Callable[[], bool],
     ) -> HarnessOutcome: ...
 
@@ -101,7 +114,16 @@ class Worker:
 
         try:
             outcome = self._harness.execute_or_resume(
-                task.run_id, task.correlation_id, cancellation_requested
+                HarnessExecutionContext(
+                    run_id=task.run_id,
+                    correlation_id=task.correlation_id,
+                    task_id=task.task_id,
+                    attempt_id=attempt_id,
+                    lease_id=lease_id,
+                    worker_id=self.identity.worker_id,
+                    metadata=MappingProxyType(dict(task.metadata)),
+                ),
+                cancellation_requested,
             )
         except Exception as exc:
             heartbeat_stop.set()

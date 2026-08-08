@@ -443,7 +443,7 @@ class TestTerminationPolicy:
                 TerminationReason.OBJECTIVE_SATISFIED,
             ),
             (
-                TerminationContext(False, 0.95, 1, 0.5),
+                TerminationContext(False, 0.95, 0, 0.5),
                 TerminationReason.CONFIDENCE_THRESHOLD_REACHED,
             ),
             (
@@ -496,3 +496,9 @@ class TestTerminationPolicy:
         )
         assert not decision.terminate
         assert decision.reason is None
+
+    def test_confidence_does_not_hide_remaining_gaps(self) -> None:
+        decision = TerminationPolicy().evaluate(
+            self.session(), TerminationContext(False, 0.99, 1, 0.5)
+        )
+        assert not decision.terminate
