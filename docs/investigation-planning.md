@@ -72,13 +72,14 @@ dependency mapping, budget, and creation time. Construction rejects unknown node
 self-dependencies, duplicate IDs, and cycles. Independent investigations remain root
 nodes and are therefore parallelizable.
 
-The plan compiles through the distributed task contracts:
+The plan is compiled into distributed work only by the orchestration service:
 
-- `to_distributed_tasks(run_ids)` creates public `DistributedTask` objects with the
-  session correlation ID, required capabilities, and an explicit Agent Harness
-  `run_id` supplied by the application;
-- task metadata carries plan, investigation, gap, question, evidence requirements,
-  constraints, and dependency task IDs.
+- `PlanExecutionController` submits each investigation through
+  `RuntimeApplication.submit_task` with the session correlation ID, the
+  investigation's required capabilities and priority, and an explicit Agent
+  Harness `run_id` supplied by the application;
+- task metadata carries plan, investigation, gap, question, hypothesis, evidence
+  requirements, constraints, and dependency investigation IDs.
 
 The distributed runtime task record currently has no dependency field. The
 integration/orchestration service must therefore submit only the dependency-ready

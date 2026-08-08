@@ -349,17 +349,14 @@ class TestInvestigationPlanning:
         )
 
         plan = InvestigationPlanner().build(session, selection_for(first, second))
-        tasks = plan.to_distributed_tasks(
-            {
-                first.investigation_id: "run-a",
-                second.investigation_id: "run-b",
-            }
-        )
 
-        assert len(tasks) == 2
-        assert all(task.metadata.get("dependency_task_ids") == [] for task in tasks)
+        assert {item.investigation_id for item in plan.investigations} == {
+            first.investigation_id,
+            second.investigation_id,
+        }
+        assert plan.dependencies == {item.investigation_id: () for item in plan.investigations}
 
-    def test_dependencies_compile_to_distributed_tasks(self) -> None:
+    def test_dependencies_are_retained_in_plan(self) -> None:
         first = candidate(gap("gap-a"))
         second = candidate(gap("gap-b"))
         plan = InvestigationPlan(
@@ -370,23 +367,8 @@ class TestInvestigationPlanning:
             created_at=NOW,
         )
 
-        tasks = plan.to_distributed_tasks(
-            {
-                first.investigation_id: "run-a",
-                second.investigation_id: "run-b",
-            }
-        )
-        second_task = next(
-            task for task in tasks if task.run_id == "run-b"
-        )
-
-        assert second_task.metadata["dependency_task_ids"] == [
-            plan.task_id_for(first.investigation_id)
-        ]
-        assert [task.task_id for task in tasks] == [
-            plan.task_id_for(first.investigation_id),
-            plan.task_id_for(second.investigation_id),
-        ]
+        assert plan.dependencies[first.investigation_id] == ()
+        assert plan.dependencies[second.investigation_id] == (first.investigation_id,)
 
     def test_cycles_are_rejected(self) -> None:
         first = candidate(gap("gap-a"))
@@ -403,7 +385,7 @@ class TestInvestigationPlanning:
                 created_at=NOW,
             )
 
-    def test_plan_round_trip_and_distributed_contract(self) -> None:
+    def test_plan_round_trip(self) -> None:
         first = candidate(gap("gap-a"))
         second = candidate(gap("gap-b"))
         plan = InvestigationPlan(
@@ -414,33 +396,20 @@ class TestInvestigationPlanning:
             created_at=NOW,
         )
         restored = InvestigationPlan.from_dict(json.loads(json.dumps(plan.to_dict())))
-        run_ids = {
-            first.investigation_id: "run-a",
-            second.investigation_id: "run-b",
-        }
-
-        tasks = restored.to_distributed_tasks(run_ids)
 
         assert restored.to_dict() == plan.to_dict()
-        assert {task.run_id for task in tasks} == {"run-a", "run-b"}
-        assert all(task.correlation_id == "session-1" for task in tasks)
-        second_task = next(task for task in tasks if task.run_id == "run-b")
-        assert second_task.metadata["dependency_task_ids"] == [
-            plan.task_id_for(first.investigation_id)
-        ]
-        assert second_task.required_capabilities == frozenset(second.capabilities)
+        assert restored.dependencies[second.investigation_id] == (first.investigation_id,)
 
-    def test_compilation_requires_agent_run_lineage(self) -> None:
+    def test_unknown_dependency_is_rejected(self) -> None:
         item = candidate()
-        plan = InvestigationPlan(
-            session_id="session-1",
-            investigations=(item,),
-            dependencies={},
-            budget=budget(),
-            created_at=NOW,
-        )
-        with pytest.raises(DomainError, match="missing AgentRun"):
-            plan.to_distributed_tasks({})
+        with pytest.raises(DomainError, match="unknown investigations"):
+            InvestigationPlan(
+                session_id="session-1",
+                investigations=(item,),
+                dependencies={"missing": ()},
+                budget=budget(),
+                created_at=NOW,
+            )
 
 
 class TestTerminationPolicy:

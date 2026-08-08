@@ -3,9 +3,10 @@
 ## Status
 
 Accepted for Phase 4. Superseded in part: plans no longer compile through the legacy
-`TaskDAG` (removed in the architectural consolidation). `PlanExecutionController`
-submits dependency-ready waves from the plan's `to_distributed_tasks` contract, and
-the remainder of this decision is unchanged.
+`TaskDAG` (removed in the architectural consolidation) or through a plan-level
+`to_distributed_tasks` helper. `PlanExecutionController` submits dependency-ready
+waves through `RuntimeApplication.submit_task`, and the remainder of this decision is
+unchanged.
 
 ## Context
 
@@ -16,7 +17,8 @@ the subsystem boundary.
 
 ## Decision
 
-Plans compile through the existing `TaskDAG`. `PlanExecutionController` persists the
+The plan itself does not compile to task records; the legacy `TaskDAG` was removed
+during the architectural consolidation. `PlanExecutionController` persists the
 plan-to-AgentRun-to-distributed-task mapping and submits only nodes whose parent tasks
 have succeeded. The normal `RuntimeApplication.submit_task` boundary remains the only
 submission path. Capabilities, priorities, retries, worker assignment, leases,

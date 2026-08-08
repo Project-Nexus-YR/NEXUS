@@ -3,10 +3,12 @@
 ## Status
 
 Superseded in part: the legacy `TaskDAG` was removed during the architectural
-consolidation. The decision that planning never creates or executes an agent loop, and
-that `InvestigationPlan` compiles to public `DistributedTask` records with explicit
-AgentRun IDs, remains in force. Dependency-ready waves are submitted by
-`PlanExecutionController` through `RuntimeApplication.submit_task`.
+consolidation. The decision that planning never creates or executes an agent loop,
+and that `InvestigationPlan` retains explicit investigation identifiers and
+dependency mappings for the integration application, remains in force. Dependency-
+ready waves are submitted by `PlanExecutionController` through
+`RuntimeApplication.submit_task`; the plan itself no longer compiles to
+`DistributedTask` records.
 
 ## Context
 
@@ -23,11 +25,12 @@ existing knowledge scorer. Candidate generation, extended scoring, selection,
 dependency validation, information-gain forecasting, and termination are
 deterministic for deterministic inputs.
 
-An `InvestigationPlan` compiles to the existing `TaskDAG` and public
-`DistributedTask` record. AgentRun IDs are supplied explicitly by the integration
-application; planning never creates or executes an agent loop. Because the current
-distributed task schema has no dependency field, the integration layer submits ready
-DAG waves through the public runtime API instead of changing coordinator internals.
+An `InvestigationPlan` retains explicit investigation identifiers and dependency
+mappings. AgentRun IDs are supplied explicitly by the integration application;
+planning never creates or executes an agent loop and never constructs
+`DistributedTask` records directly. Because the current distributed task schema has
+no dependency field, the integration layer submits ready DAG waves through the
+public runtime API instead of changing coordinator internals.
 
 ## Consequences
 
