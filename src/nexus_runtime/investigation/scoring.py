@@ -68,6 +68,22 @@ class InvestigationScore:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class InformationGainForecast:
+    expected_information_gain: float
+    expected_uncertainty_reduction: float
+    estimated_cost: float
+    information_gain_per_cost: float
+
+    def to_dict(self) -> dict[str, float]:
+        return {
+            "expected_information_gain": self.expected_information_gain,
+            "expected_uncertainty_reduction": self.expected_uncertainty_reduction,
+            "estimated_cost": self.estimated_cost,
+            "information_gain_per_cost": self.information_gain_per_cost,
+        }
+
+
 class InvestigationScoringModel:
     """Extend the existing gain/cost scorer with bounded planning trade-offs."""
 
@@ -160,6 +176,23 @@ class InvestigationScoringModel:
             scored.append(self.score(candidate, gap, redundancy=redundancy))
         scored.sort(key=lambda item: (-item.score, item.candidate.investigation_id))
         return tuple(scored)
+
+    def forecast(self, scored: Sequence[InvestigationScore]) -> InformationGainForecast:
+        if not scored:
+            return InformationGainForecast(0.0, 0.0, 0.0, 0.0)
+        expected_gain = sum(
+            item.candidate.expected_information_gain * item.score for item in scored
+        )
+        uncertainty_reduction = sum(
+            item.candidate.uncertainty_reduction * item.score for item in scored
+        )
+        cost = sum(item.candidate.estimated_cost for item in scored)
+        return InformationGainForecast(
+            expected_information_gain=expected_gain,
+            expected_uncertainty_reduction=uncertainty_reduction,
+            estimated_cost=cost,
+            information_gain_per_cost=expected_gain / cost if cost else expected_gain,
+        )
 
     def _existing_score(self, candidate: CandidateInvestigation, gap: KnowledgeGapLike) -> float:
         legacy = self._investigation_type(

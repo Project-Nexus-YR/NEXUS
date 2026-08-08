@@ -28,10 +28,16 @@ def _as_float(value: object) -> float:
 
 class ExistingInvestigation(Protocol):
     id: str
+    gap_id: str
     description: str
     target_entities: list[str]
+    expected_information_gain: float
+    uncertainty_reduction: float
+    importance: float
     estimated_cost: float
+    score: float
     metadata: dict[str, Any]
+    created_at: str
 
 
 class KnowledgeGapLike(Protocol):
@@ -40,10 +46,14 @@ class KnowledgeGapLike(Protocol):
     description: str
     reason: str
     affected_entities: list[str]
+    affected_relations: list[str]
+    affected_claims: list[str]
     uncertainty: float
     importance: float
     estimated_cost: float
     candidate_investigations: list[ExistingInvestigation]
+    metadata: dict[str, Any]
+    created_at: str
 
     @property
     def priority(self) -> float: ...
