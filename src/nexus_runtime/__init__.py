@@ -1,23 +1,56 @@
 """NEXUS autonomous research runtime public API."""
 
 from .agent import AgentExecutor, AgentRole, Budget
-from .api import RuntimeAPI
-from .dag import TaskDAG
+from .distributed import (
+    Clock,
+    Coordinator,
+    DistributedTask,
+    DistributedTaskState,
+    FailureClass,
+    Harness,
+    HarnessExecutionContext,
+    HarnessOutcome,
+    InMemoryTaskStore,
+    Lease,
+    LeaseStore,
+    ManualClock,
+    RetryPolicy,
+    RuntimeConfig,
+    SQLiteTaskStore,
+    SystemClock,
+    TaskPriority,
+    TaskStore,
+    Worker,
+)
 from .events import Event, InMemoryEventBus
-from .models import AgentRun, AgentRunState, Task, TaskState
-from .scheduler import Scheduler
+from .models import Agent, AgentRun, AgentRunState
 
 __all__ = [
+    "Agent",
     "AgentExecutor",
     "AgentRole",
     "AgentRun",
     "AgentRunState",
     "Budget",
+    "Clock",
+    "Coordinator",
+    "DistributedTask",
+    "DistributedTaskState",
     "Event",
+    "FailureClass",
+    "Harness",
+    "HarnessExecutionContext",
+    "HarnessOutcome",
     "InMemoryEventBus",
-    "RuntimeAPI",
-    "Scheduler",
-    "Task",
-    "TaskDAG",
-    "TaskState",
+    "InMemoryTaskStore",
+    "Lease",
+    "LeaseStore",
+    "ManualClock",
+    "RetryPolicy",
+    "RuntimeConfig",
+    "SQLiteTaskStore",
+    "SystemClock",
+    "TaskPriority",
+    "TaskStore",
+    "Worker",
 ]

@@ -349,12 +349,17 @@ class TestInvestigationPlanning:
         )
 
         plan = InvestigationPlanner().build(session, selection_for(first, second))
-        dag = plan.to_task_dag()
+        tasks = plan.to_distributed_tasks(
+            {
+                first.investigation_id: "run-a",
+                second.investigation_id: "run-b",
+            }
+        )
 
-        assert len(dag.ready()) == 2
-        assert all(not task.dependencies for task in dag.tasks.values())
+        assert len(tasks) == 2
+        assert all(task.metadata.get("dependency_task_ids") == [] for task in tasks)
 
-    def test_dependencies_compile_to_existing_task_dag(self) -> None:
+    def test_dependencies_compile_to_distributed_tasks(self) -> None:
         first = candidate(gap("gap-a"))
         second = candidate(gap("gap-b"))
         plan = InvestigationPlan(
@@ -365,11 +370,23 @@ class TestInvestigationPlanning:
             created_at=NOW,
         )
 
-        dag = plan.to_task_dag()
-        second_task = dag.tasks[plan.task_id_for(second.investigation_id)]
+        tasks = plan.to_distributed_tasks(
+            {
+                first.investigation_id: "run-a",
+                second.investigation_id: "run-b",
+            }
+        )
+        second_task = next(
+            task for task in tasks if task.run_id == "run-b"
+        )
 
-        assert second_task.dependencies == {plan.task_id_for(first.investigation_id)}
-        assert [task.task_id for task in dag.ready()] == [plan.task_id_for(first.investigation_id)]
+        assert second_task.metadata["dependency_task_ids"] == [
+            plan.task_id_for(first.investigation_id)
+        ]
+        assert [task.task_id for task in tasks] == [
+            plan.task_id_for(first.investigation_id),
+            plan.task_id_for(second.investigation_id),
+        ]
 
     def test_cycles_are_rejected(self) -> None:
         first = candidate(gap("gap-a"))

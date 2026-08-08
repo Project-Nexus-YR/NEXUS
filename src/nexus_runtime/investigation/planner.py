@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from nexus_runtime.dag import TaskDAG
 from nexus_runtime.distributed.model import DistributedTask, TaskPriority
-from nexus_runtime.models import DomainError, ResourceRequirements, Task
+from nexus_runtime.models import DomainError
 
 from .generator import CandidateInvestigation, _stable_id
 from .objective import (
@@ -19,12 +18,6 @@ from .objective import (
 )
 from .selector import SelectionResult
 from .session import InvestigationBudget, InvestigationSession, SessionState
-
-
-@dataclass(frozen=True, slots=True)
-class CompiledInvestigationPlan:
-    dag: TaskDAG
-    distributed_tasks: tuple[DistributedTask, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,30 +75,6 @@ class InvestigationPlan:
             raise DomainError(f"unknown plan investigation: {investigation_id}")
         return _stable_id("task", self.plan_id, investigation_id)
 
-    def to_task_dag(self) -> TaskDAG:
-        dag = TaskDAG()
-        by_id = {item.investigation_id: item for item in self.investigations}
-        for investigation_id in self._topological_order():
-            investigation = by_id[investigation_id]
-            dag.add(
-                Task(
-                    task_id=self.task_id_for(investigation_id),
-                    description=investigation.question,
-                    capability=investigation.capabilities[0],
-                    inputs=self._task_payload(investigation),
-                    dependencies={
-                        self.task_id_for(parent) for parent in self.dependencies[investigation_id]
-                    },
-                    priority=round(investigation.priority * 100),
-                    resources=ResourceRequirements(labels=frozenset(investigation.capabilities)),
-                    timeout=timedelta(seconds=investigation.estimated_duration_seconds),
-                    idempotency_key=f"{self.plan_id}:{investigation_id}",
-                    created_at=self.created_at,
-                    updated_at=self.created_at,
-                )
-            )
-        return dag
-
     def to_distributed_tasks(self, run_ids: Mapping[str, str]) -> tuple[DistributedTask, ...]:
         missing = set(self.dependencies) - set(run_ids)
         if missing:
@@ -134,9 +103,6 @@ class InvestigationPlan:
                 )
             )
         return tuple(tasks)
-
-    def compile(self, run_ids: Mapping[str, str]) -> CompiledInvestigationPlan:
-        return CompiledInvestigationPlan(self.to_task_dag(), self.to_distributed_tasks(run_ids))
 
     def to_dict(self) -> dict[str, object]:
         return {

@@ -11,7 +11,6 @@ from threading import RLock
 from typing import Any, Protocol, cast
 
 from .events import Event
-from .models import Task
 
 
 def _json_default(value: object) -> object:
@@ -27,15 +26,11 @@ def _json_default(value: object) -> object:
 
 
 class StateStore(Protocol):
-    def record_task(self, task: Task, reason: str) -> None: ...
-
     def record_event(self, event: Event) -> None: ...
 
     def save_checkpoint(self, run_id: str, payload: dict[str, Any]) -> int: ...
 
     def load_checkpoint(self, run_id: str) -> dict[str, Any] | None: ...
-
-    def latest_task_snapshots(self) -> list[dict[str, Any]]: ...
 
 
 class SQLiteStateStore:
@@ -48,14 +43,6 @@ class SQLiteStateStore:
         with self._connection:
             self._connection.executescript(
                 """
-                CREATE TABLE IF NOT EXISTS task_transitions (
-                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
-                    task_id TEXT NOT NULL,
-                    state TEXT NOT NULL,
-                    reason TEXT NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    recorded_at TEXT NOT NULL
-                );
                 CREATE TABLE IF NOT EXISTS checkpoints (
                     run_id TEXT NOT NULL,
                     version INTEGER NOT NULL,
@@ -72,15 +59,6 @@ class SQLiteStateStore:
                     recorded_at TEXT NOT NULL
                 );
                 """
-            )
-
-    def record_task(self, task: Task, reason: str) -> None:
-        payload = json.dumps(asdict(task), default=_json_default, sort_keys=True)
-        with self._lock, self._connection:
-            self._connection.execute(
-                "INSERT INTO task_transitions(task_id, state, reason, payload_json, recorded_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (task.task_id, task.state.value, reason, payload, task.updated_at.isoformat()),
             )
 
     def record_event(self, event: Event) -> None:
@@ -122,31 +100,6 @@ class SQLiteStateStore:
                 (run_id,),
             ).fetchone()
         return None if row is None else json.loads(str(row["payload_json"]))
-
-    def task_history(self, task_id: str) -> list[dict[str, Any]]:
-        with self._lock:
-            rows = self._connection.execute(
-                "SELECT state, reason, payload_json, recorded_at FROM task_transitions "
-                "WHERE task_id = ? ORDER BY sequence",
-                (task_id,),
-            ).fetchall()
-        return [dict(row) for row in rows]
-
-    def latest_task_snapshots(self) -> list[dict[str, Any]]:
-        with self._lock:
-            rows = self._connection.execute(
-                """
-                SELECT transitions.payload_json
-                FROM task_transitions AS transitions
-                INNER JOIN (
-                    SELECT task_id, MAX(sequence) AS latest_sequence
-                    FROM task_transitions GROUP BY task_id
-                ) AS latest ON transitions.task_id = latest.task_id
-                    AND transitions.sequence = latest.latest_sequence
-                ORDER BY transitions.sequence
-                """
-            ).fetchall()
-        return [json.loads(str(row["payload_json"])) for row in rows]
 
     def close(self) -> None:
         self._connection.close()
