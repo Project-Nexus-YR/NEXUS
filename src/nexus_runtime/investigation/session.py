@@ -9,17 +9,22 @@ from enum import StrEnum
 
 from nexus_runtime.models import DomainError, InvalidTransition, new_id, utcnow
 
-from .objective import _timestamp_from_text, _timestamp_to_text, _validate_timestamp
+from .objective import (
+    _required_string,
+    _timestamp_from_text,
+    _timestamp_to_text,
+    _validate_timestamp,
+)
 
 
 def _as_int(value: object) -> int:
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+    if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError
-    return int(value)
+    return value
 
 
 def _as_float(value: object) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError
     return float(value)
 
@@ -184,7 +189,8 @@ class InvestigationSession:
                 SessionState.CANCELLED,
             }
         ),
-        SessionState.PAUSED: _ACTIVE_STATES,
+        SessionState.PAUSED: _ACTIVE_STATES
+        | frozenset({SessionState.FAILED, SessionState.CANCELLED}),
         SessionState.COMPLETED: frozenset(),
         SessionState.FAILED: frozenset(),
         SessionState.CANCELLED: frozenset(),
@@ -223,7 +229,11 @@ class InvestigationSession:
             raise InvalidTransition(
                 f"invalid investigation session transition: {self.state} -> {target}"
             )
-        if self.state == SessionState.PAUSED and target != self.paused_from:
+        if (
+            self.state == SessionState.PAUSED
+            and target in _ACTIVE_STATES
+            and target != self.paused_from
+        ):
             raise InvalidTransition("a paused session must resume its prior active state")
         if target in _TERMINAL_STATES and reason is None:
             raise DomainError("terminal transitions require a termination reason")
@@ -314,19 +324,24 @@ class InvestigationSession:
                 raise TypeError
             reason_value = payload["termination_reason"]
             paused_value = payload["paused_from"]
+            state_value = _required_string(payload["state"], "session state")
+            if reason_value is not None and not isinstance(reason_value, str):
+                raise TypeError
+            if paused_value is not None and not isinstance(paused_value, str):
+                raise TypeError
             return cls(
-                session_id=str(payload["session_id"]),
-                objective_id=str(payload["objective_id"]),
-                state=SessionState(str(payload["state"])),
+                session_id=_required_string(payload["session_id"], "session_id"),
+                objective_id=_required_string(payload["objective_id"], "objective_id"),
+                state=SessionState(state_value),
                 iteration=_as_int(payload["iteration"]),
                 created_at=_timestamp_from_text(payload["created_at"], "created_at"),
                 updated_at=_timestamp_from_text(payload["updated_at"], "updated_at"),
                 budget=InvestigationBudget.from_dict(budget),
                 usage=InvestigationUsage.from_dict(usage),
                 termination_reason=(
-                    None if reason_value is None else TerminationReason(str(reason_value))
+                    None if reason_value is None else TerminationReason(reason_value)
                 ),
-                paused_from=None if paused_value is None else SessionState(str(paused_value)),
+                paused_from=None if paused_value is None else SessionState(paused_value),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise DomainError("malformed InvestigationSession") from exc

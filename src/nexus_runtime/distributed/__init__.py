@@ -15,7 +15,7 @@ from .model import (
     TaskPriority,
 )
 from .store import InMemoryTaskStore, LeaseStore, SQLiteTaskStore, TaskStore
-from .worker import Harness, HarnessOutcome, Worker
+from .worker import Harness, HarnessExecutionContext, HarnessOutcome, Worker
 
 __all__ = [
     "Clock",
@@ -24,6 +24,7 @@ __all__ = [
     "DistributedTaskState",
     "FailureClass",
     "Harness",
+    "HarnessExecutionContext",
     "HarnessOutcome",
     "InMemoryTaskStore",
     "Lease",

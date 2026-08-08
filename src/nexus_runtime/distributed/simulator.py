@@ -14,7 +14,7 @@ from .coordinator import Coordinator, RuntimeConfig
 from .model import TERMINAL_TASK_STATES, DistributedTask, TaskPriority
 from .security import WorkerIdentity
 from .store import InMemoryTaskStore
-from .worker import Harness, HarnessOutcome, HarnessStatus, Worker
+from .worker import Harness, HarnessExecutionContext, HarnessOutcome, HarnessStatus, Worker
 
 
 class DeterministicHarness:
@@ -28,16 +28,15 @@ class DeterministicHarness:
 
     def execute_or_resume(
         self,
-        run_id: str,
-        correlation_id: str,
+        context: HarnessExecutionContext,
         cancellation_requested: Callable[[], bool],
     ) -> HarnessOutcome:
-        self.calls.append(run_id)
+        self.calls.append(context.run_id)
         if self._execute:
-            return self._execute(run_id, correlation_id, cancellation_requested)
+            return self._execute(context.run_id, context.correlation_id, cancellation_requested)
         if cancellation_requested():
             return HarnessOutcome(HarnessStatus.CANCELLED)
-        return HarnessOutcome(HarnessStatus.SUCCEEDED, result_ref=f"result://{run_id}")
+        return HarnessOutcome(HarnessStatus.SUCCEEDED, result_ref=f"result://{context.run_id}")
 
     def cancel_run(self, run_id: str) -> None:
         self.cancelled.append(run_id)

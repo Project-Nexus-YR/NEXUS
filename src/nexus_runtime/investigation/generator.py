@@ -12,6 +12,7 @@ from nexus_runtime.models import DomainError
 
 from .objective import (
     ResearchObjective,
+    _required_string,
     _string_tuple,
     _timestamp_from_text,
     _timestamp_to_text,
@@ -21,7 +22,7 @@ from .objective import (
 
 
 def _as_float(value: object) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise DomainError("numeric candidate field is malformed")
     return float(value)
 
@@ -217,10 +218,10 @@ class CandidateInvestigation:
             raise DomainError("candidate metadata must be an object")
         try:
             return cls(
-                investigation_id=str(payload["investigation_id"]),
-                gap_id=str(payload["gap_id"]),
-                question=str(payload["question"]),
-                hypothesis=str(payload["hypothesis"]),
+                investigation_id=_required_string(payload["investigation_id"], "investigation_id"),
+                gap_id=_required_string(payload["gap_id"], "gap_id"),
+                question=_required_string(payload["question"], "question"),
+                hypothesis=_required_string(payload["hypothesis"], "hypothesis"),
                 required_evidence=_string_tuple(
                     payload["required_evidence"], "required_evidence", allow_empty=False
                 ),

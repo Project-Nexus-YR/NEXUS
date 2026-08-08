@@ -7,6 +7,7 @@ reconstructed after the coordinator, worker, or agent process restarts.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 _LINEAGE_FIELDS = (
@@ -82,3 +83,14 @@ class EvidenceProvenance:
             "chunk_id": self.chunk_id,
             "source_reference": self.source_reference,
         }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> EvidenceProvenance:
+        fields = (*_LINEAGE_FIELDS, "source_reference")
+        values: dict[str, str] = {}
+        for name in fields:
+            value = payload.get(name)
+            if not isinstance(value, str):
+                raise ValueError(f"malformed evidence provenance field: {name}")
+            values[name] = value
+        return cls(**values)

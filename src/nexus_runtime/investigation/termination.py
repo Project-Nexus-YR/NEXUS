@@ -90,7 +90,10 @@ class TerminationPolicy:
                 SessionState.COMPLETED,
                 "all objective success criteria are satisfied",
             )
-        if context.objective_confidence >= self._confidence_threshold:
+        if (
+            context.remaining_gap_count == 0
+            and context.objective_confidence >= self._confidence_threshold
+        ):
             return self._stop(
                 TerminationReason.CONFIDENCE_THRESHOLD_REACHED,
                 SessionState.COMPLETED,

@@ -13,6 +13,7 @@ from nexus_runtime.models import DomainError
 from .generator import ExistingInvestigation, KnowledgeGapLike, _stable_id
 from .objective import (
     ResearchObjective,
+    _required_string,
     _string_tuple,
     _timestamp_from_text,
     _timestamp_to_text,
@@ -22,7 +23,7 @@ from .objective import (
 
 
 def _number(value: object, field_name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise DomainError(f"{field_name} must be numeric")
     return float(value)
 
@@ -83,9 +84,9 @@ def _deserialize_gap(payload: object) -> KnowledgeGapLike:
             raise DomainError("candidate investigation must be an object")
         candidates.append(
             investigation_type(
-                id=str(raw["id"]),
-                gap_id=str(raw["gap_id"]),
-                description=str(raw["description"]),
+                id=_required_string(raw["id"], "candidate id"),
+                gap_id=_required_string(raw["gap_id"], "candidate gap_id"),
+                description=_required_string(raw["description"], "candidate description"),
                 target_entities=list(
                     _string_tuple(raw.get("target_entities", []), "target_entities")
                 ),
@@ -100,15 +101,15 @@ def _deserialize_gap(payload: object) -> KnowledgeGapLike:
                 estimated_cost=_number(raw.get("estimated_cost", 0.0), "estimated_cost"),
                 score=_number(raw.get("score", 0.0), "score"),
                 metadata=dict(raw.get("metadata", {})),
-                created_at=str(raw["created_at"]),
+                created_at=_required_string(raw["created_at"], "candidate created_at"),
             )
         )
     try:
         result = gap_type(
-            id=str(payload["id"]),
-            kind=str(payload["kind"]),
-            description=str(payload["description"]),
-            reason=str(payload["reason"]),
+            id=_required_string(payload["id"], "gap id"),
+            kind=_required_string(payload["kind"], "gap kind"),
+            description=_required_string(payload["description"], "gap description"),
+            reason=_required_string(payload["reason"], "gap reason"),
             affected_entities=list(
                 _string_tuple(payload.get("affected_entities", []), "affected_entities")
             ),
@@ -123,7 +124,7 @@ def _deserialize_gap(payload: object) -> KnowledgeGapLike:
             estimated_cost=_number(payload.get("estimated_cost", 0.0), "estimated_cost"),
             candidate_investigations=candidates,
             metadata=dict(payload.get("metadata", {})),
-            created_at=str(payload["created_at"]),
+            created_at=_required_string(payload["created_at"], "gap created_at"),
         )
     except KeyError as exc:
         raise DomainError("malformed knowledge snapshot gap") from exc
@@ -236,16 +237,16 @@ class KnowledgeSnapshot:
             raise DomainError("malformed KnowledgeSnapshot")
         try:
             return cls(
-                snapshot_id=str(payload["snapshot_id"]),
-                objective_id=str(payload["objective_id"]),
-                query=str(payload["query"]),
+                snapshot_id=_required_string(payload["snapshot_id"], "snapshot_id"),
+                objective_id=_required_string(payload["objective_id"], "objective_id"),
+                query=_required_string(payload["query"], "query"),
                 gaps=tuple(_deserialize_gap(gap) for gap in raw_gaps),
                 retrieval_refs=_string_tuple(payload["retrieval_refs"], "retrieval_refs"),
                 entity_ids=_string_tuple(payload["entity_ids"], "entity_ids"),
                 relation_ids=_string_tuple(payload["relation_ids"], "relation_ids"),
                 contradiction_ids=_string_tuple(payload["contradiction_ids"], "contradiction_ids"),
                 mean_uncertainty=_number(payload["mean_uncertainty"], "mean_uncertainty"),
-                summary=str(payload["summary"]),
+                summary=_required_string(payload["summary"], "summary"),
                 metadata=dict(metadata),
                 observed_at=_timestamp_from_text(payload["observed_at"], "observed_at"),
             )

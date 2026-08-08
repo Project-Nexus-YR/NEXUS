@@ -11,7 +11,12 @@ from nexus_runtime.distributed.model import DistributedTask, TaskPriority
 from nexus_runtime.models import DomainError, ResourceRequirements, Task
 
 from .generator import CandidateInvestigation, _stable_id
-from .objective import _timestamp_from_text, _timestamp_to_text, _validate_timestamp
+from .objective import (
+    _required_string,
+    _timestamp_from_text,
+    _timestamp_to_text,
+    _validate_timestamp,
+)
 from .selector import SelectionResult
 from .session import InvestigationBudget, InvestigationSession, SessionState
 
@@ -156,13 +161,17 @@ class InvestigationPlan:
             raise DomainError("malformed InvestigationPlan")
         normalized_dependencies: dict[str, tuple[str, ...]] = {}
         for key, value in dependencies.items():
-            if not isinstance(key, str) or not isinstance(value, list):
+            if (
+                not isinstance(key, str)
+                or not isinstance(value, list)
+                or any(not isinstance(item, str) for item in value)
+            ):
                 raise DomainError("malformed plan dependencies")
-            normalized_dependencies[key] = tuple(str(item) for item in value)
+            normalized_dependencies[key] = tuple(value)
         try:
             return cls(
-                plan_id=str(payload["plan_id"]),
-                session_id=str(payload["session_id"]),
+                plan_id=_required_string(payload["plan_id"], "plan_id"),
+                session_id=_required_string(payload["session_id"], "session_id"),
                 investigations=tuple(
                     CandidateInvestigation.from_dict(item)
                     for item in investigations

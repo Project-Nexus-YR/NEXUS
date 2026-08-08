@@ -271,6 +271,26 @@ class KnowledgeEngine:
             source_references={sid: sources[sid].reference for sid in source_ids if sid in sources},
         )
 
+    def validate_evidence_provenance(
+        self,
+        source_id: str,
+        document_id: str,
+        chunk_id: str,
+        source_reference: str,
+    ) -> bool:
+        """Validate a source → document → chunk chain through the public service boundary."""
+        source = self.repository.sources.get(source_id)
+        document = self.repository.documents.get(document_id)
+        chunk = self.repository.chunks.get(chunk_id)
+        return bool(
+            source is not None
+            and document is not None
+            and chunk is not None
+            and source.reference == source_reference
+            and document.source_id == source.id
+            and chunk.document_id == document.id
+        )
+
     # -- transactions ---------------------------------------------------
     def commit_knowledge_update(self, update: KnowledgeUpdate) -> KnowledgeUpdateReceipt:
         """Atomically apply a batch of knowledge changes."""
