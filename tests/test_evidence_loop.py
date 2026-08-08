@@ -28,6 +28,7 @@ from nexus_runtime.investigation.provenance import EvidenceProvenance
 from nexus_runtime.investigation.verification import (
     ClaimVerifier,
     EpistemicStatus,
+    VerificationDecision,
     VerificationPolicy,
 )
 
@@ -111,6 +112,42 @@ class TestEvidenceContracts:
     def test_incomplete_provenance_is_rejected(self):
         with pytest.raises(ValueError, match="tool_call_id"):
             replace(_provenance(), tool_call_id="")
+
+    def test_malformed_persisted_provenance_is_not_coerced(self):
+        payload = _provenance().to_dict()
+        payload["attempt_id"] = None
+        with pytest.raises(ValueError, match="attempt_id"):
+            EvidenceProvenance.from_dict(payload)
+
+    def test_malformed_persisted_verification_boolean_is_not_coerced(self):
+        evaluation = EvidenceEvaluator().evaluate(
+            EvidenceSet(session_id="session-1", evidence=(_evidence(),))
+        )
+        payload = (
+            ClaimVerifier(VerificationPolicy(min_independent_sources=1))
+            .verify(evaluation)
+            .decisions[0]
+            .to_dict()
+        )
+        payload["eligible_for_update"] = "false"
+        with pytest.raises(ValueError, match="malformed verification decision"):
+            VerificationDecision.from_dict(payload)
+
+    def test_claim_id_cannot_alias_different_claims(self):
+        london = ClaimStatement("Atlas in London", "Atlas", "located_in", "London", "claim-x")
+        paris = ClaimStatement("Atlas in Paris", "Atlas", "located_in", "Paris", "claim-x")
+        with pytest.raises(ValueError, match="claim_id"):
+            EvidenceSet(
+                "session-1",
+                (
+                    _evidence(claim=london),
+                    _evidence(
+                        claim=paris,
+                        source_id="source-b",
+                        source_reference="https://example.test/b",
+                    ),
+                ),
+            )
 
     def test_anonymous_evidence_is_rejected(self):
         with pytest.raises(ValueError, match="excerpt or payload"):
@@ -342,6 +379,26 @@ class TestKnowledgeUpdate:
         result = integrator.apply(submission)
         assert result.accepted_records == 0
         assert ingested_engine.repository.claims.count() == before
+
+    def test_dangling_source_lineage_is_rejected(self, ingested_engine):
+        claim = ClaimStatement("Atlas in London", "Atlas", "located_in", "London")
+        evidence_set = EvidenceSet(
+            "session-1",
+            (
+                _evidence(claim=claim),
+                _evidence(
+                    claim=claim,
+                    source_id="source-b",
+                    source_reference="https://example.test/b",
+                    document_id="document-b",
+                    chunk_id="chunk-b",
+                ),
+            ),
+        )
+        report = ClaimVerifier().verify(EvidenceEvaluator().evaluate(evidence_set))
+
+        with pytest.raises(ValueError, match="does not resolve"):
+            KnowledgeUpdateIntegrator(ingested_engine).prepare(report, evidence_set)
 
     def test_existing_contradiction_is_preserved_and_not_auto_verified(self, ingested_engine):
         claim, evidence_set = self._verified_set(ingested_engine)
