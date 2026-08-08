@@ -92,9 +92,19 @@ class AgentExecutor:
         self._delegation_agents: dict[str, Agent] = {}
 
     def create_run(
-        self, agent: Agent, investigation_id: str, budget: Budget, task_id: str | None = None
+        self,
+        agent: Agent,
+        investigation_id: str,
+        budget: Budget,
+        task_id: str | None = None,
+        run_id: str | None = None,
     ) -> AgentRun:
-        run = AgentRun(agent_id=agent.agent_id, investigation_id=investigation_id, task_id=task_id)
+        run = AgentRun(
+            agent_id=agent.agent_id,
+            investigation_id=investigation_id,
+            task_id=task_id,
+            run_id=run_id or new_id("run"),
+        )
         self._runs[run.run_id] = run
         self._budgets[run.run_id] = budget
         self._agents[agent.agent_id] = agent
