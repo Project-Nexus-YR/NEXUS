@@ -9,7 +9,9 @@ outcome as a lineage-complete :class:`InvestigationResult`.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from typing import Any
 
 from nexus_runtime.agent import AgentExecutor
@@ -26,17 +28,18 @@ from nexus_runtime.models import (
     Budget,
     DomainError,
     ToolCall,
+    utcnow,
 )
 
+from .candidate_claims import CandidateClaimExtractor
 from .evidence import (
+    AgentConclusion,
     ClaimStatement,
-    Evidence,
-    EvidenceRole,
     EvidenceSet,
     InvestigationResult,
     InvestigationResultState,
+    ToolObservation,
 )
-from .provenance import EvidenceProvenance
 from .results import InvestigationResultRepository
 
 DEFAULT_ACTION_SCHEMA: dict[str, Any] = {
@@ -50,7 +53,39 @@ DEFAULT_ACTION_SCHEMA: dict[str, Any] = {
         },
         "tool": {"type": "string"},
         "input": {"type": "object"},
-        "output": {"type": "object"},
+        "output": {
+            "type": "object",
+            "properties": {
+                "final_answer": {"type": "string"},
+                "conclusions": {
+                    "type": "array",
+                    "description": "structured assertions derived from the investigation",
+                    "items": {
+                        "type": "object",
+                        "required": ["claim", "supporting_observation_ids"],
+                        "properties": {
+                            "conclusion_id": {"type": "string"},
+                            "claim": {
+                                "type": "object",
+                                "required": ["text", "subject", "predicate", "object"],
+                                "properties": {
+                                    "text": {"type": "string"},
+                                    "subject": {"type": "string"},
+                                    "predicate": {"type": "string"},
+                                    "object": {"type": "string"},
+                                },
+                            },
+                            "supporting_observation_ids": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "confidence": {"type": "number"},
+                            "metadata": {"type": "object"},
+                        },
+                    },
+                },
+            },
+        },
     },
 }
 
@@ -111,7 +146,7 @@ class AgentHarness:
                     break
                 steps += 1
                 response = self._executor.reason(
-                    run.run_id, self._build_prompt(context), DEFAULT_ACTION_SCHEMA
+                    run.run_id, self._build_prompt(context, run), DEFAULT_ACTION_SCHEMA
                 )
                 action = self._executor.choose_action(run.run_id, response)
                 self._executor.execute_action(run.run_id, action)
@@ -215,65 +250,125 @@ class AgentHarness:
         run: AgentRun,
     ) -> InvestigationResult:
         investigation_id = str(context.metadata.get("investigation_id") or "")
-        evidence = tuple(
-            self._build_evidence(context, call)
+        observations = tuple(
+            self._build_observation(context, call)
             for call in run.tool_calls
             if call.status != "FAILED"
         )
-        evidence_set = EvidenceSet(session_id=context.correlation_id, evidence=evidence)
-        return InvestigationResult(
+        conclusions, malformed = self._parse_conclusions(run.outputs)
+        metadata = {
+            "agent_id": run.agent_id,
+            "outputs": run.outputs,
+            "tool_call_count": len(run.tool_calls),
+            "malformed_conclusions": malformed,
+        }
+        result = InvestigationResult(
             session_id=context.correlation_id,
             investigation_id=investigation_id,
             task_id=context.task_id,
             attempt_id=context.attempt_id,
             run_id=context.run_id,
             state=InvestigationResultState.COMPLETED,
-            evidence_set=evidence_set,
+            evidence_set=EvidenceSet(session_id=context.correlation_id, evidence=()),
+            final_answer=_final_answer(run.outputs),
+            conclusions=conclusions,
+            observations=observations,
+            metadata=metadata,
+        )
+        extraction = CandidateClaimExtractor().extract(result)
+        result_metadata = dict(metadata)
+        result_metadata["claim_extraction"] = {
+            "extractor": "candidate_claim_extractor",
+            "candidate_count": len(extraction.candidates),
+            "conclusion_count": len(conclusions),
+            "candidate_ids": [item.candidate_id for item in extraction.candidates],
+            "diagnostics": [item.to_dict() for item in extraction.diagnostics],
+        }
+        return replace(
+            result,
+            evidence_set=extraction.evidence_set,
+            metadata=result_metadata,
+        )
+
+    @staticmethod
+    def _build_observation(
+        context: HarnessExecutionContext,
+        call: ToolCall,
+    ) -> ToolObservation:
+        tool_name = call.tool_name
+        output = call.output or {}
+        source_id = _observation_value(output, call.input, "source_id", f"tool:{tool_name}")
+        document_id = _observation_value(output, call.input, "document_id", f"document:{tool_name}")
+        chunk_id = _observation_value(output, call.input, "chunk_id", f"chunk:{tool_name}")
+        source_reference = _observation_value(
+            output, call.input, "source_reference", f"tool://{tool_name}"
+        )
+        return ToolObservation(
+            observation_id=call.tool_call_id,
+            tool_name=tool_name,
+            status=call.status,
+            input=dict(call.input),
+            output=None if call.output is None else dict(call.output),
+            source_reference=source_reference,
+            timestamp=call.completed_at or utcnow(),
             metadata={
-                "agent_id": run.agent_id,
-                "outputs": run.outputs,
-                "tool_call_count": len(run.tool_calls),
+                "status": call.status,
+                "task_id": context.task_id,
+                "source_id": source_id,
+                "document_id": document_id,
+                "chunk_id": chunk_id,
+                "source_reference": source_reference,
+                "source_quality": _observation_quality(output, call.input),
             },
         )
 
     @staticmethod
-    def _build_evidence(
-        context: HarnessExecutionContext,
-        call: ToolCall,
-    ) -> Evidence:
-        tool_name = call.tool_name
-        status = call.status
-        source = f"tool://{tool_name}"
-        claim = ClaimStatement(
-            text=f"{tool_name} executed with status {status}",
-            subject=tool_name,
-            predicate="executed",
-            object=status,
-        )
-        provenance = EvidenceProvenance(
-            session_id=context.correlation_id,
-            investigation_id=str(context.metadata.get("investigation_id") or ""),
-            task_id=context.task_id,
-            attempt_id=context.attempt_id,
-            run_id=context.run_id,
-            tool_call_id=call.tool_call_id,
-            source_id=f"tool:{tool_name}",
-            document_id=_provenance_value(call.input, "document_id", f"document:{tool_name}"),
-            chunk_id=_provenance_value(call.input, "chunk_id", f"chunk:{tool_name}"),
-            source_reference=source,
-        )
-        return Evidence(
-            investigation_id=provenance.investigation_id,
-            source=source,
-            claim=claim,
-            provenance=provenance,
-            confidence=0.5,
-            source_quality=0.5,
-            excerpt=f"{tool_name} executed",
-            payload=dict(call.input),
-            role=EvidenceRole.SUPPORTING,
-            metadata={"status": status, "task_id": context.task_id},
-        )
+    def _parse_conclusions(
+        outputs: Mapping[str, Any],
+    ) -> tuple[tuple[AgentConclusion, ...], list[dict[str, Any]]]:
+        raw = outputs.get("conclusions")
+        if not isinstance(raw, list):
+            return (), []
+        conclusions: list[AgentConclusion] = []
+        malformed: list[dict[str, Any]] = []
+        for index, item in enumerate(raw):
+            if not isinstance(item, dict):
+                malformed.append({"index": index, "reason": "conclusion must be an object"})
+                continue
+            try:
+                claim_payload = item.get("claim")
+                if not isinstance(claim_payload, dict):
+                    raise ValueError("claim must be an object")
+                claim = ClaimStatement(
+                    text=_payload_string(claim_payload, "text"),
+                    subject=_payload_string(claim_payload, "subject"),
+                    predicate=_payload_string(claim_payload, "predicate"),
+                    object=_payload_string(claim_payload, "object"),
+                    claim_id=_optional_string(claim_payload, "claim_id"),
+                )
+                observation_ids = item.get("supporting_observation_ids", [])
+                if not isinstance(observation_ids, list) or any(
+                    not isinstance(observation_id, str) for observation_id in observation_ids
+                ):
+                    raise ValueError("supporting_observation_ids must be a list of strings")
+                raw_metadata = item.get("metadata", {})
+                if not isinstance(raw_metadata, dict):
+                    raise ValueError("conclusion metadata must be an object")
+                confidence = item.get("confidence", 0.5)
+                if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+                    raise ValueError("conclusion confidence must be numeric")
+                conclusions.append(
+                    AgentConclusion(
+                        claim=claim,
+                        supporting_observation_ids=tuple(observation_ids),
+                        confidence=float(confidence),
+                        conclusion_id=_optional_string(item, "conclusion_id"),
+                        metadata=dict(raw_metadata),
+                    )
+                )
+            except ValueError as exc:
+                malformed.append({"index": index, "reason": str(exc)})
+        return tuple(conclusions), malformed
 
     @staticmethod
     def _classify(error: str) -> FailureClass:
@@ -285,7 +380,7 @@ class AgentHarness:
         return FailureClass.TRANSIENT
 
     @staticmethod
-    def _build_prompt(context: HarnessExecutionContext) -> str:
+    def _build_prompt(context: HarnessExecutionContext, run: AgentRun) -> str:
         metadata = context.metadata
         parts = ["Investigate the objective and record structured evidence."]
         question = str(metadata.get("question") or "")
@@ -294,6 +389,11 @@ class AgentHarness:
             parts.append(f"Question: {question}")
         if hypothesis:
             parts.append(f"Hypothesis: {hypothesis}")
+        for call in run.tool_calls:
+            parts.append(
+                f"[observation:{call.tool_call_id}] tool {call.tool_name} "
+                f"input={json.dumps(call.input, sort_keys=True, default=str)}"
+            )
         return "\n".join(parts)
 
     @staticmethod
@@ -305,6 +405,47 @@ def _provenance_value(payload: Mapping[str, Any], key: str, default: str) -> str
     value = payload.get(key)
     if not isinstance(value, str) or not value.strip():
         return default
+    return value
+
+
+def _payload_string(payload: Mapping[str, Any], key: str, *, default: str = "") -> str:
+    value = payload.get(key)
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string")
+    return value or default
+
+
+def _optional_string(payload: Mapping[str, Any], key: str, default: str = "") -> str:
+    value = payload.get(key)
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        raise ValueError(f"{key} must be a string")
+    return value or default
+
+
+def _observation_value(
+    output: Mapping[str, Any],
+    tool_input: Mapping[str, Any],
+    key: str,
+    default: str,
+) -> str:
+    return _provenance_value(output, key, _provenance_value(tool_input, key, default))
+
+
+def _observation_quality(output: Mapping[str, Any], tool_input: Mapping[str, Any]) -> float:
+    for source in (output, tool_input):
+        value = source.get("source_quality")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        return min(1.0, max(0.0, float(value)))
+    return 0.5
+
+
+def _final_answer(outputs: Mapping[str, Any]) -> str:
+    value = outputs.get("final_answer")
+    if not isinstance(value, str):
+        return ""
     return value
 
 

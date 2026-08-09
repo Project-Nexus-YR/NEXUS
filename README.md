@@ -203,5 +203,10 @@ pytest -ra                                   # run all tests
 pytest --cov=nexus_knowledge --cov-fail-under=80   # knowledge engine coverage gate
 ```
 
+The investigation evidence pipeline is covered by sectioned verification
+suites (grounding, provenance, identity, duplicates, lifecycle, adversarial,
+replay, boundaries, closed loop, LLM-source trust, performance). See
+[investigation verification test plan](docs/investigation-verification-tests.md).
+
 See [architecture](docs/architecture.md), [runtime](docs/runtime.md), and
 [distributed runtime](docs/distributed-runtime.md) for the integration boundary.

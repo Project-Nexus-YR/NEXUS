@@ -17,11 +17,13 @@ class EvidenceQualityPolicy:
 
     min_evidence_confidence: float = 0.5
     min_source_quality: float = 0.5
+    min_evidentiary_strength: float = 0.0
 
     def __post_init__(self) -> None:
         for value, name in (
             (self.min_evidence_confidence, "min_evidence_confidence"),
             (self.min_source_quality, "min_source_quality"),
+            (self.min_evidentiary_strength, "min_evidentiary_strength"),
         ):
             if not 0.0 <= value <= 1.0:
                 raise ValueError(f"{name} must be between zero and one")
@@ -83,7 +85,16 @@ class EvidenceEvaluator:
         fused = self._fusion.fuse(evidence_set)
         duplicate_ids = tuple(item.duplicate_evidence_id for item in fused.duplicates)
         conflicts = self._unresolved_conflicts(fused)
-        claims = tuple(self._evaluate_claim(claim, fused, conflicts) for claim in fused.claims)
+        supporting_by_id = {
+            item.evidence_id: item
+            for candidate in fused.claims
+            for item in candidate.supporting
+            if self._acceptable(item)
+        }
+        claims = tuple(
+            self._evaluate_claim(claim, fused, conflicts, supporting_by_id)
+            for claim in fused.claims
+        )
         low_quality_ids = tuple(
             sorted({item for claim in claims for item in claim.low_quality_evidence_ids})
         )
@@ -101,6 +112,7 @@ class EvidenceEvaluator:
         fused_claim: FusedClaim,
         fusion: FusionResult,
         unresolved_conflicts: tuple[EvidenceConflict, ...],
+        supporting_by_id: dict[str, Evidence],
     ) -> ClaimEvaluation:
         claim = fused_claim.claim
         all_evidence = fused_claim.all_evidence
@@ -122,13 +134,7 @@ class EvidenceEvaluator:
                 else conflict.evidence_a_ids
             )
         }
-        by_id = {
-            item.evidence_id: item
-            for candidate in fusion.claims
-            for item in candidate.supporting
-            if self._acceptable(item)
-        }
-        opposing = tuple(by_id[evidence_id] for evidence_id in sorted(opposing_ids))
+        opposing = tuple(supporting_by_id[evidence_id] for evidence_id in sorted(opposing_ids))
         contradicting = explicit_contra + opposing
         neutral = tuple(item for item in fused_claim.neutral if item in accepted)
         duplicate_ids = tuple(
@@ -186,6 +192,7 @@ class EvidenceEvaluator:
         return (
             evidence.confidence >= self._policy.min_evidence_confidence
             and evidence.source_quality >= self._policy.min_source_quality
+            and evidence.evidentiary_strength >= self._policy.min_evidentiary_strength
         )
 
     @staticmethod

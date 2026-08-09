@@ -23,17 +23,18 @@ from nexus_runtime.distributed.worker import (
 from nexus_runtime.events import InMemoryEventBus
 from nexus_runtime.investigation.agent_harness import AgentHarness
 from nexus_runtime.investigation.application import InvestigationApplication
+from nexus_runtime.investigation.candidate_claims import CandidateClaimExtractor
 from nexus_runtime.investigation.evidence import (
+    AgentConclusion,
     ClaimStatement,
-    Evidence,
     EvidenceSet,
     InvestigationResult,
     InvestigationResultState,
+    ToolObservation,
 )
 from nexus_runtime.investigation.execution import PlanExecution, PlanExecutionController
 from nexus_runtime.investigation.metrics import InMemoryInvestigationMetrics
 from nexus_runtime.investigation.objective import ResearchObjective
-from nexus_runtime.investigation.provenance import EvidenceProvenance
 from nexus_runtime.investigation.repository import (
     InMemoryInvestigationRepository,
     SQLiteInvestigationRepository,
@@ -158,6 +159,7 @@ class EvidenceHarness:
         self.fail_once = fail_once
         self.calls = 0
         self.results: list[InvestigationResult] = []
+        self._extractor = CandidateClaimExtractor()
 
     def execute_or_resume(
         self,
@@ -172,40 +174,37 @@ class EvidenceHarness:
                 failure_class=FailureClass.TRANSIENT,
                 error="temporary source failure",
             )
-        task = context
         investigation_id = str(context.metadata["investigation_id"])
-        claim = ClaimStatement(
-            text="Acme is active",
-            subject="Acme",
-            predicate="status",
-            object="active",
-            claim_id="claim-acme-active",
-        )
-        evidence = tuple(
-            Evidence(
-                investigation_id=investigation_id,
-                source=f"source://{source}",
-                claim=claim,
-                provenance=EvidenceProvenance(
-                    session_id=context.correlation_id,
-                    investigation_id=investigation_id,
-                    task_id=task.task_id,
-                    attempt_id=context.attempt_id,
-                    run_id=context.run_id,
-                    tool_call_id=f"tool-{source}",
-                    source_id=f"source-{source}",
-                    document_id=f"document-{source}",
-                    chunk_id=f"chunk-{source}",
-                    source_reference=f"source://{source}",
-                ),
-                confidence=0.95,
-                source_quality=0.9,
-                excerpt=f"independent report {source}",
-                evidence_id=f"evidence-{context.task_id}-{source}",
+        observations = tuple(
+            ToolObservation(
+                observation_id=f"observation-{source}",
+                tool_name="search",
+                status="SUCCEEDED",
+                input={"source": source},
+                output={"excerpt": f"independent report {source}"},
+                source_reference=f"source://{source}",
+                metadata={
+                    "source_id": f"source-{source}",
+                    "document_id": f"document-{source}",
+                    "chunk_id": f"chunk-{source}",
+                    "source_reference": f"source://{source}",
+                    "source_quality": 0.9,
+                },
             )
             for source in ("a", "b")
         )
-        evidence_set = EvidenceSet(session_id=context.correlation_id, evidence=evidence)
+        conclusion = AgentConclusion(
+            claim=ClaimStatement(
+                text="Acme is active",
+                subject="Acme",
+                predicate="status",
+                object="active",
+                claim_id="claim-acme-active",
+            ),
+            supporting_observation_ids=("observation-a", "observation-b"),
+            confidence=0.95,
+            conclusion_id="conclusion-acme-active",
+        )
         result = InvestigationResult(
             session_id=context.correlation_id,
             investigation_id=investigation_id,
@@ -213,8 +212,12 @@ class EvidenceHarness:
             attempt_id=context.attempt_id,
             run_id=context.run_id,
             state=InvestigationResultState.COMPLETED,
-            evidence_set=evidence_set,
+            evidence_set=EvidenceSet(session_id=context.correlation_id, evidence=()),
+            conclusions=(conclusion,),
+            observations=observations,
         )
+        extraction = self._extractor.extract(result)
+        result = replace(result, evidence_set=extraction.evidence_set)
         self.results.append(result)
         return HarnessOutcome(HarnessStatus.SUCCEEDED, self.result_repository.save(result))
 
@@ -708,6 +711,49 @@ class QueueModel:
         return self.responses.pop(0)
 
 
+class TranscriptAwareModel:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(self, prompt: str, response_schema: dict[str, object]) -> object:
+        self.calls += 1
+        if self.calls == 1:
+            return {
+                "action": "tool",
+                "tool": "search",
+                "input": {
+                    "query": "acme",
+                    "document_id": "doc-acme",
+                    "chunk_id": "chunk-acme",
+                },
+            }
+        observation_id = "tool_unknown"
+        for line in prompt.splitlines():
+            if line.startswith("[observation:"):
+                observation_id = line.split("]", 1)[0][len("[observation:") :]
+                break
+        return {
+            "action": "finish",
+            "output": {
+                "final_answer": "Acme is active",
+                "conclusions": [
+                    {
+                        "claim": {
+                            "text": "Acme is active",
+                            "subject": "Acme",
+                            "predicate": "status",
+                            "object": "active",
+                            "claim_id": "claim-acme-active",
+                        },
+                        "supporting_observation_ids": [observation_id],
+                        "confidence": 0.95,
+                        "conclusion_id": "conclusion-acme-active",
+                    }
+                ],
+            },
+        }
+
+
 class Memory:
     def recall(self, query: str, limit: int = 10) -> list[dict[str, str]]:
         return []
@@ -736,20 +782,7 @@ def test_agent_harness_runs_production_distributed_investigation() -> None:
     registry = ToolRegistry(PolicyEngine({agent.agent_id: frozenset({"search.execute"})}))
     registry.register(SearchTool())
     executor = AgentExecutor(
-        QueueModel(
-            [
-                {
-                    "action": "tool",
-                    "tool": "search",
-                    "input": {
-                        "query": "acme",
-                        "document_id": "doc-acme",
-                        "chunk_id": "chunk-acme",
-                    },
-                },
-                {"action": "finish", "output": {"summary": "verified"}},
-            ]
-        ),
+        TranscriptAwareModel(),
         Memory(),
         registry,
     )
@@ -800,6 +833,15 @@ def test_agent_harness_runs_production_distributed_investigation() -> None:
     assert evidence.provenance.document_id == "doc-acme"
     assert evidence.provenance.chunk_id == "chunk-acme"
     assert evidence.source == "tool://search"
+    assert len(result.observations) == 1
+    observation_id = result.observations[0].observation_id
+    assert len(result.conclusions) == 1
+    assert result.conclusions[0].supporting_observation_ids == (observation_id,)
+    assert result.conclusions[0].claim.claim_id == "claim-acme-active"
+    assert result.metadata["claim_extraction"]["candidate_count"] == 1
+    assert result.metadata["claim_extraction"]["conclusion_count"] == 1
+    assert result.metadata["claim_extraction"]["diagnostics"] == []
+    assert result.metadata["malformed_conclusions"] == []
 
     outcome = app.process_results(
         session.session_id,

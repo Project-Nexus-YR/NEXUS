@@ -65,6 +65,7 @@ class ToolCall:
     input: dict[str, Any]
     result_ref: str | None
     status: str
+    output: dict[str, Any] | None = None
     tool_call_id: str = field(default_factory=lambda: new_id("tool"))
     started_at: datetime = field(default_factory=utcnow)
     completed_at: datetime | None = None
@@ -147,11 +148,15 @@ def _observation_from_dict(value: dict[str, Any]) -> Observation:
 
 
 def _tool_call_from_dict(value: dict[str, Any]) -> ToolCall:
+    output = value.get("output")
+    if output is not None and not isinstance(output, dict):
+        raise DomainError("tool call output must be an object or null")
     return ToolCall(
         tool_name=str(value["tool_name"]),
         input=dict(value.get("input", {})),
         result_ref=value.get("result_ref"),
         status=str(value["status"]),
+        output=None if output is None else dict(output),
         tool_call_id=str(value["tool_call_id"]),
         started_at=_parse_iso(value.get("started_at")) or utcnow(),
         completed_at=_parse_iso(value.get("completed_at")),

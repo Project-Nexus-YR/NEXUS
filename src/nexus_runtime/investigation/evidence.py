@@ -15,6 +15,13 @@ from nexus_runtime.models import new_id, utcnow
 from .provenance import EvidenceProvenance
 
 
+def _stable_id(prefix: str, *parts: object) -> str:
+    digest = hashlib.sha256("\x1f".join(str(part) for part in parts).encode("utf-8")).hexdigest()[
+        :24
+    ]
+    return f"{prefix}_{digest}"
+
+
 def _required(value: str, name: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be a non-empty string")
@@ -56,6 +63,29 @@ class EvidenceRole(StrEnum):
     NEUTRAL = "neutral"
 
 
+class EvidenceGrade(StrEnum):
+    """Discrete quality bucket derived from the evidentiary-strength composite."""
+
+    STRONG = "strong"
+    MODERATE = "moderate"
+    WEAK = "weak"
+
+
+GRADE_THRESHOLDS: tuple[tuple[EvidenceGrade, float], ...] = (
+    (EvidenceGrade.STRONG, 0.7),
+    (EvidenceGrade.MODERATE, 0.4),
+    (EvidenceGrade.WEAK, 0.0),
+)
+
+
+def grade_for_strength(strength: float) -> EvidenceGrade:
+    """Map an evidentiary-strength score to its discrete grade."""
+    for grade, threshold in GRADE_THRESHOLDS:
+        if strength >= threshold:
+            return grade
+    return EvidenceGrade.WEAK
+
+
 class InvestigationResultState(StrEnum):
     COMPLETED = "completed"
     PARTIAL = "partial"
@@ -71,7 +101,7 @@ class ClaimStatement:
     subject: str
     predicate: str
     object: str
-    claim_id: str = field(default_factory=lambda: new_id("claim"))
+    claim_id: str = ""
 
     def __post_init__(self) -> None:
         for value, name in (
@@ -79,9 +109,13 @@ class ClaimStatement:
             (self.subject, "subject"),
             (self.predicate, "predicate"),
             (self.object, "object"),
-            (self.claim_id, "claim_id"),
         ):
             _required(value, name)
+        claim_id = self.claim_id.strip()
+        if not claim_id:
+            claim_id = _stable_id("claim", *self.identity)
+        _required(claim_id, "claim_id")
+        object.__setattr__(self, "claim_id", claim_id)
 
     @property
     def identity(self) -> tuple[str, str, str]:
@@ -116,6 +150,159 @@ class ClaimStatement:
             )
         except KeyError as exc:
             raise ValueError("malformed claim statement") from exc
+
+
+@dataclass(frozen=True, slots=True)
+class ToolObservation:
+    """A serializable record of one tool execution during an agent run.
+
+    The ``observation_id`` is the runtime ``tool_call_id`` so that
+    conclusions can reference observations and the lineage chain
+    ``investigation -> run -> conclusion -> observation -> evidence -> source``
+    remains reconstructable after a restart.
+    """
+
+    observation_id: str
+    tool_name: str
+    status: str
+    input: dict[str, Any]
+    output: dict[str, Any] | None = None
+    source_reference: str = ""
+    timestamp: datetime = field(default_factory=utcnow)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for value, name in (
+            (self.observation_id, "observation_id"),
+            (self.tool_name, "tool_name"),
+            (self.status, "status"),
+        ):
+            _required(value, name)
+        if not isinstance(self.input, dict):
+            raise ValueError("observation input must be an object")
+        if self.output is not None and not isinstance(self.output, dict):
+            raise ValueError("observation output must be an object or null")
+        if not isinstance(self.metadata, dict):
+            raise ValueError("observation metadata must be an object")
+        object.__setattr__(self, "metadata", dict(self.metadata))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "observation_id": self.observation_id,
+            "tool_name": self.tool_name,
+            "status": self.status,
+            "input": dict(self.input),
+            "output": None if self.output is None else dict(self.output),
+            "source_reference": self.source_reference,
+            "timestamp": self.timestamp.isoformat(),
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> ToolObservation:
+        observation_input = payload.get("input")
+        output = payload.get("output")
+        metadata = payload.get("metadata", {})
+        source_reference = payload.get("source_reference", "")
+        status = payload.get("status")
+        tool_name = payload.get("tool_name")
+        if (
+            not isinstance(observation_input, dict)
+            or not isinstance(output, dict | None)
+            or not isinstance(metadata, dict)
+            or not isinstance(source_reference, str)
+            or not isinstance(status, str)
+            or not isinstance(tool_name, str)
+        ):
+            raise ValueError("malformed tool observation")
+        try:
+            return cls(
+                observation_id=_persisted_string(payload, "observation_id"),
+                tool_name=tool_name,
+                status=status,
+                input=dict(observation_input),
+                output=None if output is None else dict(output),
+                source_reference=source_reference,
+                timestamp=_parse_timestamp(payload["timestamp"]),
+                metadata=dict(metadata),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("malformed tool observation") from exc
+
+
+@dataclass(frozen=True, slots=True)
+class AgentConclusion:
+    """A candidate assertion proposed by an agent, not yet trusted knowledge.
+
+    A conclusion references observations by their ``observation_id``.  It
+    becomes a candidate claim only after deterministic extraction, and it
+    never enters the knowledge graph without passing verification.
+    """
+
+    claim: ClaimStatement
+    supporting_observation_ids: tuple[str, ...]
+    confidence: float
+    conclusion_id: str = ""
+    created_at: datetime = field(default_factory=utcnow)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if isinstance(self.confidence, bool) or not isinstance(self.confidence, (int, float)):
+            raise ValueError("conclusion confidence must be numeric")
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("conclusion confidence must be between zero and one")
+        if not isinstance(self.supporting_observation_ids, (tuple, list)):
+            raise ValueError("supporting_observation_ids must be a sequence of strings")
+        observation_ids = tuple(sorted({str(item) for item in self.supporting_observation_ids}))
+        for observation_id in observation_ids:
+            _required(observation_id, "supporting_observation_id")
+        if not isinstance(self.metadata, dict):
+            raise ValueError("conclusion metadata must be an object")
+        object.__setattr__(self, "supporting_observation_ids", observation_ids)
+        object.__setattr__(self, "metadata", dict(self.metadata))
+        conclusion_id = self.conclusion_id.strip()
+        if not conclusion_id:
+            conclusion_id = _stable_id(
+                "conclusion",
+                self.claim.claim_id,
+                *observation_ids,
+            )
+        _required(conclusion_id, "conclusion_id")
+        object.__setattr__(self, "conclusion_id", conclusion_id)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "conclusion_id": self.conclusion_id,
+            "claim": self.claim.to_dict(),
+            "supporting_observation_ids": list(self.supporting_observation_ids),
+            "confidence": self.confidence,
+            "created_at": self.created_at.isoformat(),
+            "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> AgentConclusion:
+        claim = payload.get("claim")
+        observation_ids = payload.get("supporting_observation_ids")
+        metadata = payload.get("metadata", {})
+        if (
+            not isinstance(claim, dict)
+            or not isinstance(observation_ids, list)
+            or any(not isinstance(item, str) for item in observation_ids)
+            or not isinstance(metadata, dict)
+        ):
+            raise ValueError("malformed agent conclusion")
+        try:
+            return cls(
+                conclusion_id=_persisted_string(payload, "conclusion_id"),
+                claim=ClaimStatement.from_dict(claim),
+                supporting_observation_ids=tuple(observation_ids),
+                confidence=_persisted_float(payload, "confidence"),
+                created_at=_parse_timestamp(payload["created_at"]),
+                metadata=dict(metadata),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("malformed agent conclusion") from exc
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +356,21 @@ class Evidence:
         encoded = json.dumps(content, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
+    @property
+    def evidentiary_strength(self) -> float:
+        """Conservative composite of agent confidence and source quality.
+
+        The geometric mean requires both signals to be strong before the
+        evidence is graded STRONG, preventing a single inflated signal from
+        carrying the item.
+        """
+        return float((self.confidence * self.source_quality) ** 0.5)
+
+    @property
+    def grade(self) -> EvidenceGrade:
+        """Discrete quality bucket derived from :attr:`evidentiary_strength`."""
+        return grade_for_strength(self.evidentiary_strength)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "evidence_id": self.evidence_id,
@@ -180,6 +382,8 @@ class Evidence:
             "provenance": self.provenance.to_dict(),
             "confidence": self.confidence,
             "source_quality": self.source_quality,
+            "evidentiary_strength": self.evidentiary_strength,
+            "grade": self.grade.value,
             "role": self.role.value,
             "timestamp": self.timestamp.isoformat(),
             "supporting_entities": list(self.supporting_entities),
@@ -257,6 +461,21 @@ class EvidenceSet:
     def investigation_ids(self) -> tuple[str, ...]:
         return tuple(sorted({item.investigation_id for item in self.evidence}))
 
+    @property
+    def grade_counts(self) -> dict[str, int]:
+        """Count of evidence items per grade, keyed by grade value."""
+        counts = {grade.value: 0 for grade in EvidenceGrade}
+        for item in self.evidence:
+            counts[item.grade.value] += 1
+        return counts
+
+    @property
+    def mean_evidentiary_strength(self) -> float:
+        """Mean composite strength across the set (0.0 when empty)."""
+        if not self.evidence:
+            return 0.0
+        return sum(item.evidentiary_strength for item in self.evidence) / len(self.evidence)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "evidence_set_id": self.evidence_set_id,
@@ -293,6 +512,9 @@ class InvestigationResult:
     state: InvestigationResultState
     evidence_set: EvidenceSet
     error: str | None = None
+    final_answer: str = ""
+    conclusions: tuple[AgentConclusion, ...] = ()
+    observations: tuple[ToolObservation, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
     result_id: str = field(default_factory=lambda: new_id("investigation_result"))
     completed_at: datetime = field(default_factory=utcnow)
@@ -307,6 +529,16 @@ class InvestigationResult:
             (self.run_id, "run_id"),
         ):
             _required(value, name)
+        if not isinstance(self.final_answer, str):
+            raise ValueError("final_answer must be a string")
+        if not isinstance(self.metadata, dict):
+            raise ValueError("result metadata must be an object")
+        observation_ids = [item.observation_id for item in self.observations]
+        if len(observation_ids) != len(set(observation_ids)):
+            raise ValueError("observation_id values must be unique within a result")
+        conclusion_ids = [item.conclusion_id for item in self.conclusions]
+        if len(conclusion_ids) != len(set(conclusion_ids)):
+            raise ValueError("conclusion_id values must be unique within a result")
         if self.evidence_set.session_id != self.session_id:
             raise ValueError("result and evidence set session ids do not match")
         for item in self.evidence_set.evidence:
@@ -341,6 +573,9 @@ class InvestigationResult:
             "state": self.state.value,
             "evidence_set": self.evidence_set.to_dict(),
             "error": self.error,
+            "final_answer": self.final_answer,
+            "conclusions": [item.to_dict() for item in self.conclusions],
+            "observations": [item.to_dict() for item in self.observations],
             "metadata": self.metadata,
             "completed_at": self.completed_at.isoformat(),
         }
@@ -349,7 +584,18 @@ class InvestigationResult:
     def from_dict(cls, payload: Mapping[str, object]) -> InvestigationResult:
         evidence_set = payload.get("evidence_set")
         metadata = payload.get("metadata", {})
-        if not isinstance(evidence_set, dict) or not isinstance(metadata, dict):
+        conclusions = payload.get("conclusions", [])
+        observations = payload.get("observations", [])
+        final_answer = payload.get("final_answer", "")
+        if (
+            not isinstance(evidence_set, dict)
+            or not isinstance(metadata, dict)
+            or not isinstance(conclusions, list)
+            or any(not isinstance(item, dict) for item in conclusions)
+            or not isinstance(observations, list)
+            or any(not isinstance(item, dict) for item in observations)
+            or not isinstance(final_answer, str)
+        ):
             raise ValueError("malformed investigation result")
         error = payload.get("error")
         state = payload.get("state")
@@ -366,6 +612,9 @@ class InvestigationResult:
                 state=InvestigationResultState(state),
                 evidence_set=EvidenceSet.from_dict(evidence_set),
                 error=error,
+                final_answer=final_answer,
+                conclusions=tuple(AgentConclusion.from_dict(item) for item in conclusions),
+                observations=tuple(ToolObservation.from_dict(item) for item in observations),
                 metadata=dict(metadata),
                 completed_at=_parse_timestamp(payload["completed_at"]),
             )

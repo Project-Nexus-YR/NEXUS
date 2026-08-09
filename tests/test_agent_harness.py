@@ -27,9 +27,39 @@ class Model:
         self.responses = list(responses)
 
     def complete(self, prompt: str, response_schema: dict[str, object]) -> object:
-        if self.responses:
-            return self.responses.pop(0)
-        return {"action": "finish", "output": {"summary": "done"}}
+        response = (
+            self.responses.pop(0)
+            if self.responses
+            else {"action": "finish", "output": {"summary": "done"}}
+        )
+        if not isinstance(response, dict) or response.get("action") != "finish":
+            return response
+        observation_id = ""
+        for line in prompt.splitlines():
+            if line.startswith("[observation:"):
+                observation_id = line.split("]", 1)[0][len("[observation:") :]
+                break
+        if not observation_id:
+            return response
+        output = dict(response.get("output") or {})
+        output.setdefault(
+            "conclusions",
+            [
+                {
+                    "claim": {
+                        "text": "search returned results",
+                        "subject": "results",
+                        "predicate": "available",
+                        "object": "confirmed",
+                        "claim_id": "claim-search-results",
+                    },
+                    "supporting_observation_ids": [observation_id],
+                    "confidence": 0.9,
+                    "conclusion_id": "conclusion-search-results",
+                }
+            ],
+        )
+        return {"action": "finish", "output": output}
 
     def recall(self, query: str, limit: int = 10) -> list[dict[str, str]]:
         return []

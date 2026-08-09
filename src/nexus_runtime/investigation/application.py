@@ -12,6 +12,13 @@ from typing import Any, Protocol, cast
 from nexus_runtime.events import Event, EventBus, InMemoryEventBus
 from nexus_runtime.models import DomainError, utcnow
 
+from .acquisition import AcquisitionReport, ClaimAcquisitionService
+from .candidate_claims import (
+    CandidateClaim,
+    CandidateClaimExtractor,
+    CandidateExtractionResult,
+    ExtractionDiagnostic,
+)
 from .evaluation import Evaluation, EvidenceEvaluator
 from .evidence import EvidenceSet, InvestigationResult, InvestigationResultState
 from .execution import ExecutionStatus, PlanExecution, PlanExecutionController
@@ -29,6 +36,7 @@ from .planner import InvestigationPlan, InvestigationPlanner
 from .progress import GapState, ProgressMeasurer, ProgressReport
 from .repository import (
     InMemoryInvestigationRepository,
+    InvestigationArtifact,
     InvestigationRecord,
     InvestigationRepository,
 )
@@ -153,6 +161,8 @@ class InvestigationApplication:
         evaluator: EvidenceEvaluator | None = None,
         verifier: ClaimVerifier | None = None,
         termination: TerminationPolicy | None = None,
+        extractor: CandidateClaimExtractor | None = None,
+        acquisition: ClaimAcquisitionService | None = None,
     ) -> None:
         self._observer = KnowledgeObserver(knowledge)
         self._repository = repository or InMemoryInvestigationRepository()
@@ -171,6 +181,8 @@ class InvestigationApplication:
         if update_boundary is None:
             update_boundary = cast(KnowledgeUpdatePort, knowledge)
         self._updates = KnowledgeUpdateIntegrator(update_boundary)
+        self._extractor = extractor or CandidateClaimExtractor()
+        self._acquisition = acquisition or ClaimAcquisitionService()
 
     def create(
         self, objective: ResearchObjective, budget: InvestigationBudget
@@ -441,6 +453,30 @@ class InvestigationApplication:
         evidence_set = EvidenceSet(session_id=session_id, evidence=evidence)
         record.append("investigation_results", {"items": [item.to_dict() for item in results]})
         record.append("evidence_set", evidence_set.to_dict())
+        candidate_by_id: dict[str, CandidateClaim] = {}
+        diagnostics: list[ExtractionDiagnostic] = []
+        for result in completed:
+            extraction = self._extractor.extract(result)
+            for candidate in extraction.candidates:
+                candidate_by_id.setdefault(candidate.candidate_id, candidate)
+            diagnostics.extend(extraction.diagnostics)
+        extraction = CandidateExtractionResult(
+            session_id=session_id,
+            candidates=tuple(sorted(candidate_by_id.values(), key=lambda item: item.candidate_id)),
+            diagnostics=tuple(
+                sorted(diagnostics, key=lambda item: (item.conclusion_id, item.code))
+            ),
+            evidence_set=evidence_set,
+        )
+        record.append(
+            "candidate_claims",
+            {
+                "conclusions": sum(len(result.conclusions) for result in completed),
+                "items": [extraction.to_dict()],
+            },
+        )
+        self._metrics.increment("candidates_extracted", len(extraction.candidates))
+        self._metrics.increment("extraction_diagnostics", len(extraction.diagnostics))
         if results:
             completed_at = max(item.completed_at for item in results)
             elapsed = max(timedelta(0), completed_at - record.session.updated_at)
@@ -515,6 +551,64 @@ class InvestigationApplication:
         self._repository.save(record)
         return verification
 
+    @staticmethod
+    def _session_extraction(
+        candidate_artifact: InvestigationArtifact,
+        session_id: str,
+        evidence_set: EvidenceSet,
+    ) -> CandidateExtractionResult:
+        items = candidate_artifact.payload.get("items")
+        if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+            raise DomainError("persisted candidate claims are malformed")
+        try:
+            extractions = tuple(CandidateExtractionResult.from_dict(item) for item in items)
+        except ValueError as exc:
+            raise DomainError("persisted candidate claims are malformed") from exc
+        candidates = tuple(
+            sorted(
+                (candidate for item in extractions for candidate in item.candidates),
+                key=lambda item: item.candidate_id,
+            )
+        )
+        diagnostics = tuple(
+            sorted(
+                (diagnostic for item in extractions for diagnostic in item.diagnostics),
+                key=lambda item: (item.conclusion_id, item.code),
+            )
+        )
+        return CandidateExtractionResult(
+            session_id=session_id,
+            candidates=candidates,
+            diagnostics=diagnostics,
+            evidence_set=evidence_set,
+        )
+
+    @staticmethod
+    def _verified_report(
+        acquisition: AcquisitionReport,
+        verification: VerificationReport,
+    ) -> VerificationReport:
+        return VerificationReport(
+            verification_id=verification.verification_id,
+            session_id=verification.session_id,
+            evaluation_id=verification.evaluation_id,
+            decisions=tuple(
+                item.decision for item in acquisition.verified if item.decision is not None
+            ),
+            verified_at=verification.verified_at,
+        )
+
+    def _record_acquisition_metrics(
+        self,
+        extraction: CandidateExtractionResult,
+        acquisition: AcquisitionReport,
+    ) -> None:
+        self._metrics.increment("claims_acquired", len(acquisition.acquisitions))
+        self._metrics.increment("claims_verified", len(acquisition.verified))
+        self._metrics.increment("claims_deferred", len(acquisition.deferred))
+        self._metrics.increment("claims_rejected", len(acquisition.rejected))
+        self._metrics.increment("extraction_diagnostics", len(extraction.diagnostics))
+
     def update_knowledge(
         self,
         session_id: str,
@@ -538,8 +632,17 @@ class InvestigationApplication:
             or verification_artifact.payload != verification.to_dict()
         ):
             raise DomainError("verification is not active for this iteration")
+        candidate_artifact = self._required_artifact(record, "candidate_claims")
+        if candidate_artifact.iteration != record.session.iteration:
+            raise DomainError("candidate claims are not active for this iteration")
+        extraction = self._session_extraction(candidate_artifact, session_id, evidence_set)
+        acquisition = self._acquisition.acquire(extraction, verification)
+        record.append("claim_acquisition", acquisition.to_dict())
+        self._repository.save(record)
+        self._record_acquisition_metrics(extraction, acquisition)
+        verified = self._verified_report(acquisition, verification)
         record.session.transition(SessionState.UPDATING)
-        update = self._updates.prepare(verification, evidence_set)
+        update = self._updates.prepare(verified, evidence_set)
         record.append("knowledge_update", update.to_dict())
         self._repository.save(record)
         result = self._updates.apply(update)

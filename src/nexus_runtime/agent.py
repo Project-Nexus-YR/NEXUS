@@ -259,7 +259,14 @@ class AgentExecutor:
             self._emit("tool.failed", run, {"tool_call_id": call.tool_call_id, "error": str(exc)})
             self.transition(run_id, AgentRunState.FAILED, "tool execution failed")
             raise
-        call = ToolCall(tool_name, tool_input, None, result.decision.value, completed_at=utcnow())
+        call = ToolCall(
+            tool_name,
+            tool_input,
+            None,
+            result.decision.value,
+            output=result.output,
+            completed_at=utcnow(),
+        )
         run.tool_calls.append(call)
         self._step(run, "execute_action", (), None, f"tool {tool_name}: {result.decision.value}")
         self._emit(
