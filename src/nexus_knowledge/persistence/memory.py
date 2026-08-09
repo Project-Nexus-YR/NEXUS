@@ -16,8 +16,8 @@ from ..domain.hypothesis import Experiment, Hypothesis, Observation, Result
 from ..domain.knowledge_gap import Investigation, KnowledgeGap
 from ..domain.source import Source
 from ..port.repository import (
-    ClaimRepository,
     ChunkRepository,
+    ClaimRepository,
     DocumentRepository,
     EntityRepository,
     EvidenceRepository,
@@ -45,7 +45,7 @@ class InMemoryRepository(Generic[T]):
         self._items: dict[str, T] = {}
 
     def save(self, item: T) -> T:
-        self._items[getattr(item, "id")] = item
+        self._items[item.id] = item
         return item
 
     def get(self, item_id: str) -> T | None:

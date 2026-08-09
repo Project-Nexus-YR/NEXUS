@@ -25,7 +25,7 @@ from ..domain.claim import Claim, Evidence, Provenance
 from ..domain.common import Confidence, VerificationState
 from ..domain.document import Document
 from ..domain.entity import Entity, Relation
-from ..domain.knowledge_gap import Investigation, KnowledgeGap
+from ..domain.knowledge_gap import KnowledgeGap
 from ..domain.source import Source
 from ..graph.graph import KnowledgeGraph, KnowledgeSubgraph
 from ..ingestion.pipeline import IngestionPipeline, IngestionResult
@@ -38,7 +38,6 @@ from ..port.repository import KnowledgeRepository
 from ..port.vector_store import VectorStore
 from ..retrieval.graphrag import EvidenceGraph, GraphRAGEngine
 from ..retrieval.hybrid import HybridRetriever, RetrievalResult
-from ..retrieval.observability import RetrievalTrace
 
 __all__ = [
     "KnowledgeEngine",
@@ -172,7 +171,9 @@ class KnowledgeEngine:
                 break
         if entity_type is not None:
             entities = {e.id: e for e in self.graph.all_entities() if e.entity_type == entity_type}
-            results = [r for r in results if r["subject_id"] in entities or r["object_id"] in entities]
+            results = [
+                r for r in results if r["subject_id"] in entities or r["object_id"] in entities
+            ]
         return results
 
     def get_subgraph(
@@ -230,7 +231,9 @@ class KnowledgeEngine:
         claim = self.repository.claims.get(claim_id)
         if claim is None:
             raise KeyError(f"unknown claim id {claim_id}")
-        assessment = self.uncertainty.evaluate(claim, self.repository.evidence, self.repository.sources)
+        assessment = self.uncertainty.evaluate(
+            claim, self.repository.evidence, self.repository.sources
+        )
         claim.confidence = Confidence(assessment.confidence)
         claim.verification_state = assessment.verification_state
         self.repository.claims.save(claim)

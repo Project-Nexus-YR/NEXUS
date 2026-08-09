@@ -125,18 +125,13 @@ class ContradictionDetector:
         return contradictions
 
     # -- helpers ------------------------------------------------------
-    def _pair_contradiction(
-        self, a: Claim, b: Claim, predicate: str
-    ) -> Contradiction:
+    def _pair_contradiction(self, a: Claim, b: Claim, predicate: str) -> Contradiction:
         strength = self._pair_strength(a, b)
         return Contradiction(
             kind=ContradictionKind.CONFLICTING_CLAIMS,
             claim_a_id=a.id,
             claim_b_id=b.id,
-            description=(
-                f"claims '{a.text}' and '{b.text}' assert different "
-                f"'{predicate}' values"
-            ),
+            description=(f"claims '{a.text}' and '{b.text}' assert different '{predicate}' values"),
             evidence_a=list(a.supporting_evidence),
             evidence_b=list(b.supporting_evidence),
             strength=strength,

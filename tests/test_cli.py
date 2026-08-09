@@ -31,7 +31,15 @@ class TestIngest:
     def test_healthcheck_prints_json(self, tmp_path, capsys):
         main(["ingest", _ingest(tmp_path)])
         payload = json.loads(capsys.readouterr().out)
-        assert set(payload) == {"sources", "documents", "chunks", "entities", "relations", "claims", "evidence"}
+        assert set(payload) == {
+            "sources",
+            "documents",
+            "chunks",
+            "entities",
+            "relations",
+            "claims",
+            "evidence",
+        }
         assert payload["sources"] == 1
 
 

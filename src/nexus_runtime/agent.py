@@ -92,9 +92,19 @@ class AgentExecutor:
         self._delegation_agents: dict[str, Agent] = {}
 
     def create_run(
-        self, agent: Agent, investigation_id: str, budget: Budget, task_id: str | None = None
+        self,
+        agent: Agent,
+        investigation_id: str,
+        budget: Budget,
+        task_id: str | None = None,
+        run_id: str | None = None,
     ) -> AgentRun:
-        run = AgentRun(agent_id=agent.agent_id, investigation_id=investigation_id, task_id=task_id)
+        run = AgentRun(
+            agent_id=agent.agent_id,
+            investigation_id=investigation_id,
+            task_id=task_id,
+            run_id=run_id or new_id("run"),
+        )
         self._runs[run.run_id] = run
         self._budgets[run.run_id] = budget
         self._agents[agent.agent_id] = agent
@@ -249,7 +259,14 @@ class AgentExecutor:
             self._emit("tool.failed", run, {"tool_call_id": call.tool_call_id, "error": str(exc)})
             self.transition(run_id, AgentRunState.FAILED, "tool execution failed")
             raise
-        call = ToolCall(tool_name, tool_input, None, result.decision.value, completed_at=utcnow())
+        call = ToolCall(
+            tool_name,
+            tool_input,
+            None,
+            result.decision.value,
+            output=result.output,
+            completed_at=utcnow(),
+        )
         run.tool_calls.append(call)
         self._step(run, "execute_action", (), None, f"tool {tool_name}: {result.decision.value}")
         self._emit(

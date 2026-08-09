@@ -23,8 +23,11 @@ def _build_parser() -> argparse.ArgumentParser:
     ingest = sub.add_parser("ingest", help="ingest a text file or directory")
     ingest.add_argument("path")
     ingest.add_argument("--title", default="source")
-    ingest.add_argument("--kind", default=SourceKind.TEXT, choices=[
-        SourceKind.TEXT, SourceKind.MARKDOWN, SourceKind.JSON, SourceKind.REPOSITORY])
+    ingest.add_argument(
+        "--kind",
+        default=SourceKind.TEXT,
+        choices=[SourceKind.TEXT, SourceKind.MARKDOWN, SourceKind.JSON, SourceKind.REPOSITORY],
+    )
     ingest.add_argument("--gazetteer", default=None, help="JSON file mapping entity type -> names")
 
     retrieve = sub.add_parser("retrieve", help="hybrid retrieval for a query")
@@ -60,7 +63,9 @@ def _gazetteer(path: str | None) -> dict[str, list[str]] | None:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    adapters = Adapters(gazetteer=_gazetteer(args.gazetteer)) if hasattr(args, "gazetteer") else Adapters()
+    adapters = (
+        Adapters(gazetteer=_gazetteer(args.gazetteer)) if hasattr(args, "gazetteer") else Adapters()
+    )
     engine = create_engine(adapters)
 
     if args.command == "ingest":
@@ -74,15 +79,20 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(evidence.to_dict(), indent=2, default=str))
     elif args.command == "gaps":
         gaps = engine.find_knowledge_gaps()
-        print(json.dumps([
-            {
-                "kind": g.kind,
-                "description": g.description,
-                "priority": round(g.priority, 4),
-                "estimated_cost": g.estimated_cost,
-            }
-            for g in gaps
-        ], indent=2))
+        print(
+            json.dumps(
+                [
+                    {
+                        "kind": g.kind,
+                        "description": g.description,
+                        "priority": round(g.priority, 4),
+                        "estimated_cost": g.estimated_cost,
+                    }
+                    for g in gaps
+                ],
+                indent=2,
+            )
+        )
     elif args.command == "score":
         scored = engine.score_investigation(top_k=args.top_k)
         print(json.dumps([s.to_dict() for s in scored], indent=2))

@@ -32,7 +32,7 @@ stateDiagram-v2
 flowchart TD
     O["Observe retrieval, GraphRAG, gaps, contradictions"] --> G["Generate grounded candidates"]
     G --> S["Score gain, importance, uncertainty, availability, cost, time, risk, redundancy"]
-    S --> P["Budget/capacity selection and TaskDAG plan"]
+    S --> P["Budget/capacity selection and InvestigationPlan"]
     P --> R["Submit ready AgentRuns to distributed runtime"]
     R --> E["Collect complete and partial evidence with lineage"]
     E --> F["Fuse duplicates, support, contradictions, and low-quality evidence"]

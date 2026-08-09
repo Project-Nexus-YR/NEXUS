@@ -13,7 +13,6 @@ flowchart LR
     C --> V["Cost-aware scoring"]
     V --> X["Top-k / budget / capacity selection"]
     X --> P["InvestigationPlan"]
-    P --> D["Existing TaskDAG"]
     P --> T["Existing DistributedTask records"]
     T --> R["Distributed runtime"]
     R --> H["Agent Harness by run_id"]
@@ -73,20 +72,20 @@ dependency mapping, budget, and creation time. Construction rejects unknown node
 self-dependencies, duplicate IDs, and cycles. Independent investigations remain root
 nodes and are therefore parallelizable.
 
-The plan compiles through the repository's existing task contracts:
+The plan is compiled into distributed work only by the orchestration service:
 
-- `to_task_dag()` creates the existing `TaskDAG` for dependency validation and
-  readiness;
-- `to_distributed_tasks(run_ids)` creates public `DistributedTask` objects with the
-  session correlation ID, required capabilities, and an explicit Agent Harness
-  `run_id` supplied by the application;
-- task metadata carries plan, investigation, gap, question, evidence requirements,
-  constraints, and dependency task IDs.
+- `PlanExecutionController` submits each investigation through
+  `RuntimeApplication.submit_task` with the session correlation ID, the
+  investigation's required capabilities and priority, and an explicit Agent
+  Harness `run_id` supplied by the application;
+- task metadata carries plan, investigation, gap, question, hypothesis, evidence
+  requirements, constraints, and dependency investigation IDs.
 
 The distributed runtime task record currently has no dependency field. The
-integration/orchestration service must therefore submit only the TaskDAG's ready wave,
-then submit newly ready children after predecessor success. Dependencies are retained
-in task metadata for reconstruction, but metadata does not bypass runtime scheduling.
+integration/orchestration service must therefore submit only the dependency-ready
+wave, then submit newly ready children after predecessor success. Dependencies are
+retained in task metadata for reconstruction, but metadata does not bypass runtime
+scheduling.
 The runtime still owns assignment, leases, retries, cancellation, and recovery. The
 worker still invokes the Agent Harness; planning never calls a model directly.
 

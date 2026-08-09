@@ -15,7 +15,13 @@ def _populated_repository() -> InMemoryKnowledgeRepository:
     repo = InMemoryKnowledgeRepository()
     source = Source(title="t", kind=SourceKind.TEXT, reference="r", id="src_1")
     repo.sources.save(source)
-    document = Document(source_id=source.id, title="Doc", content_type="text", text="Ada works at Acme.", id="doc_1")
+    document = Document(
+        source_id=source.id,
+        title="Doc",
+        content_type="text",
+        text="Ada works at Acme.",
+        id="doc_1",
+    )
     repo.documents.save(document)
     chunk = Chunk(document_id=document.id, index=0, text="Ada works at Acme.", span=Span(0, 20))
     chunk_id = chunk.id

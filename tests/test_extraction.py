@@ -1,7 +1,5 @@
 """Extraction adapter tests."""
 
-import pytest
-
 from nexus_knowledge.domain.document import Chunk, Document, Span
 from nexus_knowledge.extraction.deterministic import (
     GazetteerEntityExtractor,
@@ -29,9 +27,7 @@ class TestGazetteerExtractor:
 
     def test_longest_match_wins(self):
         document, chunk = _chunk("Acme Corp is a company")
-        extractor = GazetteerEntityExtractor(
-            {"Company": ["Acme"], "Org": ["Acme Corp"]}
-        )
+        extractor = GazetteerEntityExtractor({"Company": ["Acme"], "Org": ["Acme Corp"]})
         entities = extractor.extract(chunk, document)
         assert [e.name for e in entities] == ["Acme Corp"]
         assert entities[0].entity_type == "Org"
@@ -59,9 +55,7 @@ class TestGazetteerExtractor:
 class TestPatternRelationExtractor:
     def test_extracts_relation(self):
         document, chunk = _chunk("Ada Lovelace founded Acme Corp.")
-        extractor = GazetteerEntityExtractor(
-            {"Person": ["Ada Lovelace"], "Company": ["Acme Corp"]}
-        )
+        extractor = GazetteerEntityExtractor({"Person": ["Ada Lovelace"], "Company": ["Acme Corp"]})
         entities = extractor.extract(chunk, document)
         relations = PatternRelationExtractor().extract(chunk, document, entities)
         assert len(relations) == 1
@@ -71,9 +65,7 @@ class TestPatternRelationExtractor:
         assert relation.object == "Acme Corp"
 
     def test_does_not_cross_sentence_boundary(self):
-        document, chunk = _chunk(
-            "Ada Lovelace is a person. Alan Turing founded Initech."
-        )
+        document, chunk = _chunk("Ada Lovelace is a person. Alan Turing founded Initech.")
         extractor = GazetteerEntityExtractor(
             {
                 "Person": ["Ada Lovelace", "Alan Turing"],
@@ -103,7 +95,9 @@ class TestPatternRelationExtractor:
 class TestCallbackAdapters:
     def test_callback_entity_extractor(self):
         document, chunk = _chunk("hello")
-        extractor = CallbackEntityExtractor(lambda text: [{"name": "Acme", "entity_type": "Company"}])
+        extractor = CallbackEntityExtractor(
+            lambda text: [{"name": "Acme", "entity_type": "Company"}]
+        )
         entities = extractor.extract(chunk, document)
         assert entities[0].name == "Acme"
 
@@ -113,4 +107,8 @@ class TestCallbackAdapters:
             lambda text, entities: [{"subject": "A", "predicate": "p", "object": "B"}]
         )
         relations = extractor.extract(chunk, document, [])
-        assert (relations[0].subject, relations[0].predicate, relations[0].object) == ("A", "p", "B")
+        assert (relations[0].subject, relations[0].predicate, relations[0].object) == (
+            "A",
+            "p",
+            "B",
+        )

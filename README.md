@@ -7,7 +7,7 @@ into a knowledge graph and exposes hybrid retrieval, GraphRAG evidence
 extraction, and uncertainty/contradiction/gap analysis. The runtime turns a
 research goal into a durable, inspectable investigation — planning, task
 decomposition, distributed execution, critique, synthesis — and proposes
-knowledge updates through the engine's `KnowledgeService` boundary.
+knowledge updates through the engine's knowledge-service boundary.
 
 ## Components
 
@@ -70,27 +70,28 @@ scored = engine.score_investigation(top_k=20)
 
 Provider-neutral, fault-tolerant autonomous research runtime. It deliberately
 does not implement the knowledge graph, retrieval, embeddings, entity
-extraction, or ranking subsystem — it consumes the engine via `KnowledgeService`
-and returns proposals for knowledge updates.
+extraction, or ranking subsystem — it consumes the engine via the
+knowledge-service boundary and returns proposals for knowledge updates.
 
 **Status**
 
 The Phase 3 milestone provides a provider-neutral distributed execution layer:
 
-- explicit agent, task, hypothesis, and experiment state machines;
-- a dynamic, cycle-safe task DAG and priority scheduler with worker leases;
+- explicit agent and distributed task state machines;
+- a dynamic, cycle-safe distributed task queue with priority aging and worker
+  leases;
 - at-least-once task delivery, idempotency-key deduplication, retries, timeouts,
   cancellation, backpressure, and failed-worker recovery;
 - versioned domain events, in-memory event bus, durable SQLite checkpoint/event store,
-  deterministic replay, capability policy checks, and structured outputs;
-- interfaces for model, tools, memory, search, workflow, and knowledge services;
+  capability policy checks, and structured outputs;
+- interfaces for model, tools, and memory providers;
 - mock-provider end-to-end and failure-injection tests.
 - atomic in-memory and SQLite TaskStore adapters, worker identities and capacity,
   priority aging, durable cancellation, dead letters, metrics, and coordinator restart;
 - a deterministic local multi-worker simulator using the same Coordinator, Worker,
   scheduler, queue, and harness interfaces as production adapters.
 
-The public service boundary is intentionally `KnowledgeService`; NEXUS does not read
+The public service boundary is intentionally the knowledge engine; NEXUS does not read
 the knowledge engine's database.
 
 ### Autonomous investigation (Phase 4)
@@ -121,10 +122,10 @@ pip install -e '.[dev]'
 make verify
 ```
 
-Run the mock end-to-end test without optional development dependencies:
+Run the production-path investigation test without optional development dependencies:
 
 ```bash
-PYTHONPATH=src python3 -m unittest tests.test_end_to_end -v
+PYTHONPATH=src python3 -m unittest tests.test_investigation_application -v
 ```
 
 Submit and inspect durable distributed tasks:
@@ -185,7 +186,7 @@ Retrieval at k=5:
 
 ```text
 src/nexus_knowledge/  knowledge intelligence engine (domain, graph, retrieval, eval)
-src/nexus_runtime/    autonomous research runtime (scheduler, worker, policy, replay)
+src/nexus_runtime/    autonomous research runtime (distributed execution, policy, agent loop)
 tests/                unit, integration, and fault-injection coverage
 docs/                 contracts, guarantees, and architecture decisions
 ```
@@ -201,6 +202,11 @@ dependencies.
 pytest -ra                                   # run all tests
 pytest --cov=nexus_knowledge --cov-fail-under=80   # knowledge engine coverage gate
 ```
+
+The investigation evidence pipeline is covered by sectioned verification
+suites (grounding, provenance, identity, duplicates, lifecycle, adversarial,
+replay, boundaries, closed loop, LLM-source trust, performance). See
+[investigation verification test plan](docs/investigation-verification-tests.md).
 
 See [architecture](docs/architecture.md), [runtime](docs/runtime.md), and
 [distributed runtime](docs/distributed-runtime.md) for the integration boundary.

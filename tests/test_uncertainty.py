@@ -7,7 +7,6 @@ from nexus_knowledge.domain.common import Confidence, VerificationState
 from nexus_knowledge.domain.source import Source, SourceKind
 from nexus_knowledge.knowledge.uncertainty import (
     UncertaintyModel,
-    UncertaintyWeights,
 )
 from nexus_knowledge.persistence.memory import InMemoryKnowledgeRepository
 

@@ -82,11 +82,7 @@ class GraphRAGEngine:
         subgraph = self._graph.subgraph(entity_ids, depth=depth, max_nodes=200, max_edges=800)
         graph.entities = [subgraph.nodes[eid] for eid in sorted(subgraph.nodes)]
         relation_ids = {edge.relation_id for edge in subgraph.edges}
-        relations = {
-            r.id: r
-            for r in self._repository.relations.all()
-            if r.id in relation_ids
-        }
+        relations = {r.id: r for r in self._repository.relations.all() if r.id in relation_ids}
         graph.relations = [relations[rid] for rid in sorted(relations)]
 
         chunk_ids = set()
@@ -134,7 +130,9 @@ class GraphRAGEngine:
         seen: set[tuple[str, ...]] = set()
         for i in range(len(entity_ids)):
             for j in range(i + 1, len(entity_ids)):
-                for path in self._graph.paths(entity_ids[i], entity_ids[j], max_length=4, max_paths=10):
+                for path in self._graph.paths(
+                    entity_ids[i], entity_ids[j], max_length=4, max_paths=10
+                ):
                     if path.nodes in seen:
                         continue
                     seen.add(path.nodes)

@@ -1,14 +1,12 @@
-"""Validated investigation plans compiled through the existing task contracts."""
+"""Validated, serializable investigation plans for distributed wave execution."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from nexus_runtime.dag import TaskDAG
-from nexus_runtime.distributed.model import DistributedTask, TaskPriority
-from nexus_runtime.models import DomainError, ResourceRequirements, Task
+from nexus_runtime.models import DomainError
 
 from .generator import CandidateInvestigation, _stable_id
 from .objective import (
@@ -19,12 +17,6 @@ from .objective import (
 )
 from .selector import SelectionResult
 from .session import InvestigationBudget, InvestigationSession, SessionState
-
-
-@dataclass(frozen=True, slots=True)
-class CompiledInvestigationPlan:
-    dag: TaskDAG
-    distributed_tasks: tuple[DistributedTask, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,67 +69,6 @@ class InvestigationPlan:
         object.__setattr__(self, "dependencies", normalized)
         object.__setattr__(self, "plan_id", plan_id)
 
-    def task_id_for(self, investigation_id: str) -> str:
-        if investigation_id not in self.dependencies:
-            raise DomainError(f"unknown plan investigation: {investigation_id}")
-        return _stable_id("task", self.plan_id, investigation_id)
-
-    def to_task_dag(self) -> TaskDAG:
-        dag = TaskDAG()
-        by_id = {item.investigation_id: item for item in self.investigations}
-        for investigation_id in self._topological_order():
-            investigation = by_id[investigation_id]
-            dag.add(
-                Task(
-                    task_id=self.task_id_for(investigation_id),
-                    description=investigation.question,
-                    capability=investigation.capabilities[0],
-                    inputs=self._task_payload(investigation),
-                    dependencies={
-                        self.task_id_for(parent) for parent in self.dependencies[investigation_id]
-                    },
-                    priority=round(investigation.priority * 100),
-                    resources=ResourceRequirements(labels=frozenset(investigation.capabilities)),
-                    timeout=timedelta(seconds=investigation.estimated_duration_seconds),
-                    idempotency_key=f"{self.plan_id}:{investigation_id}",
-                    created_at=self.created_at,
-                    updated_at=self.created_at,
-                )
-            )
-        return dag
-
-    def to_distributed_tasks(self, run_ids: Mapping[str, str]) -> tuple[DistributedTask, ...]:
-        missing = set(self.dependencies) - set(run_ids)
-        if missing:
-            raise DomainError(f"missing AgentRun identifiers: {sorted(missing)}")
-        tasks: list[DistributedTask] = []
-        for investigation_id in self._topological_order():
-            investigation = self._by_id(investigation_id)
-            run_id = run_ids[investigation_id].strip()
-            if not run_id:
-                raise DomainError(f"empty AgentRun identifier for {investigation_id}")
-            payload = self._task_payload(investigation)
-            payload["dependency_task_ids"] = [
-                self.task_id_for(parent) for parent in self.dependencies[investigation_id]
-            ]
-            tasks.append(
-                DistributedTask(
-                    run_id=run_id,
-                    correlation_id=self.session_id,
-                    required_capabilities=frozenset(investigation.capabilities),
-                    priority=self._distributed_priority(investigation.priority),
-                    metadata=payload,
-                    available_at=self.created_at,
-                    task_id=self.task_id_for(investigation_id),
-                    created_at=self.created_at,
-                    updated_at=self.created_at,
-                )
-            )
-        return tuple(tasks)
-
-    def compile(self, run_ids: Mapping[str, str]) -> CompiledInvestigationPlan:
-        return CompiledInvestigationPlan(self.to_task_dag(), self.to_distributed_tasks(run_ids))
-
     def to_dict(self) -> dict[str, object]:
         return {
             "plan_id": self.plan_id,
@@ -184,41 +115,6 @@ class InvestigationPlan:
         except KeyError as exc:
             raise DomainError("malformed InvestigationPlan") from exc
 
-    def _task_payload(self, investigation: CandidateInvestigation) -> dict[str, object]:
-        return {
-            "plan_id": self.plan_id,
-            "session_id": self.session_id,
-            "investigation_id": investigation.investigation_id,
-            "gap_id": investigation.gap_id,
-            "question": investigation.question,
-            "hypothesis": investigation.hypothesis,
-            "required_evidence": list(investigation.required_evidence),
-            "constraints": list(investigation.constraints),
-            "target_entities": list(investigation.target_entities),
-            "required_capabilities": list(investigation.capabilities),
-        }
-
-    def _by_id(self, investigation_id: str) -> CandidateInvestigation:
-        for investigation in self.investigations:
-            if investigation.investigation_id == investigation_id:
-                return investigation
-        raise DomainError(f"unknown plan investigation: {investigation_id}")
-
-    def _topological_order(self) -> tuple[str, ...]:
-        ordered: list[str] = []
-        completed: set[str] = set()
-        pending = set(self.dependencies)
-        while pending:
-            ready = sorted(
-                item for item in pending if set(self.dependencies[item]).issubset(completed)
-            )
-            if not ready:
-                raise DomainError("investigation dependency cycle detected")
-            ordered.extend(ready)
-            completed.update(ready)
-            pending.difference_update(ready)
-        return tuple(ordered)
-
     @staticmethod
     def _validate_acyclic(dependencies: Mapping[str, tuple[str, ...]]) -> None:
         visiting: set[str] = set()
@@ -237,14 +133,6 @@ class InvestigationPlan:
 
         for investigation_id in dependencies:
             visit(investigation_id)
-
-    @staticmethod
-    def _distributed_priority(priority: float) -> TaskPriority:
-        if priority >= 0.67:
-            return TaskPriority.HIGH
-        if priority <= 0.33:
-            return TaskPriority.LOW
-        return TaskPriority.NORMAL
 
 
 class InvestigationPlanner:

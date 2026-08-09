@@ -1,13 +1,10 @@
 """Knowledge gap engine tests."""
 
-import pytest
-
-from nexus_knowledge.domain.claim import Claim, Evidence
-from nexus_knowledge.domain.common import Confidence, VerificationState
+from nexus_knowledge.domain.claim import Claim
+from nexus_knowledge.domain.common import VerificationState
 from nexus_knowledge.domain.entity import Relation
 from nexus_knowledge.domain.knowledge_gap import GapKind
-from nexus_knowledge.domain.source import Source, SourceKind
-from nexus_knowledge.knowledge.gaps import GapEngine, GapWeights
+from nexus_knowledge.knowledge.gaps import GapWeights
 
 
 def test_find_persists_and_sorts(ingested_engine):
@@ -25,9 +22,7 @@ def test_missing_relation_detected(ingested_engine):
 
 
 def test_low_confidence_claim_detected(ingested_engine):
-    ingested_engine.propose_claim(
-        "wild claim", "Ghost", "haunts", "Acme Corp", confidence=0.1
-    )
+    ingested_engine.propose_claim("wild claim", "Ghost", "haunts", "Acme Corp", confidence=0.1)
     gaps = ingested_engine.find_knowledge_gaps()
     low = [g for g in gaps if g.kind == GapKind.LOW_CONFIDENCE]
     assert low
@@ -83,9 +78,7 @@ def test_disconnected_entity_detected(engine):
 def test_missing_evidence_detected(ingested_engine):
     repo = ingested_engine.repository
     claim = repo.claims.save(Claim(text="thin claim", subject="A", predicate="p", object="B"))
-    repo.relations.save(
-        Relation(subject_id="ent_a", predicate="p", object_id="ent_b", id="rthin")
-    )
+    repo.relations.save(Relation(subject_id="ent_a", predicate="p", object_id="ent_b", id="rthin"))
     gaps = ingested_engine.find_knowledge_gaps()
     missing = [g for g in gaps if g.kind == GapKind.MISSING_EVIDENCE]
     assert missing

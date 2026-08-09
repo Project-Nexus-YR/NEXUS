@@ -7,8 +7,8 @@ thin provider adapter. The domain layer only sees the extractor ports.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from ..domain.common import Confidence
 from ..domain.document import Chunk, Document

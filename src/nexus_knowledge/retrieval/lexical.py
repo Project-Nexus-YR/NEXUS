@@ -87,7 +87,9 @@ class LexicalRetriever:
                 if tf == 0:
                     continue
                 denominator = tf + self.k1 * (1.0 - self.b + self.b * length / self._avgdl)
-                scores[chunk_id] = scores.get(chunk_id, 0.0) + idf * (tf * (self.k1 + 1.0)) / denominator
+                scores[chunk_id] = (
+                    scores.get(chunk_id, 0.0) + idf * (tf * (self.k1 + 1.0)) / denominator
+                )
         ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
         return [
             RetrievalHit(object_id=chunk_id, score=score, method="lexical")

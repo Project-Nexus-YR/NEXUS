@@ -34,7 +34,9 @@ class FeatureExtractor:
                 self._chunk_claims[chunk_id] = self._chunk_claims.get(chunk_id, 0) + 1
         self._evidence_by_chunk: dict[str, int] = {}
         for evidence in repository.evidence.all():
-            self._evidence_by_chunk[evidence.chunk_id] = self._evidence_by_chunk.get(evidence.chunk_id, 0) + 1
+            self._evidence_by_chunk[evidence.chunk_id] = (
+                self._evidence_by_chunk.get(evidence.chunk_id, 0) + 1
+            )
 
     def features_for(
         self,

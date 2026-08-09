@@ -24,8 +24,8 @@ flowchart LR
 - `CandidateInvestigation` is a deterministic transformation of a measurable gap. It
   records the hypothesis, evidence need, capability requirements, gain, cost, time,
   risk, and priority.
-- `InvestigationPlan` validates dependencies and compiles through the existing
-  `TaskDAG` and distributed task contracts.
+- `InvestigationPlan` validates dependencies and compiles to distributed task
+  contracts.
 - `Evidence`, `Evaluation`, `VerificationReport`, `InvestigationKnowledgeUpdate`, and
   `ProgressReport` make the epistemic result inspectable rather than concatenating
   agent text.
@@ -78,8 +78,8 @@ succeeds, `PlanExecutionController` submits newly ready children through
 `RuntimeApplication`. A cancelled or dead-lettered parent marks descendants blocked
 in the persisted plan execution rather than pretending they ran.
 
-The first wave can contain many independent tasks, allowing the existing scheduler to
-place them concurrently according to required capabilities.
+The first wave can contain many independent tasks, allowing the distributed scheduler
+to place them concurrently according to required capabilities.
 
 ## Explainability and observability
 

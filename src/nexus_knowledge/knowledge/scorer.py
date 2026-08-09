@@ -15,7 +15,7 @@ policy.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Protocol
 
 from ..domain.knowledge_gap import GapKind, Investigation, KnowledgeGap
@@ -123,9 +123,7 @@ class RandomInvestigationScorer:
         self._seed = seed
 
     def score(self, investigation: Investigation, gap: KnowledgeGap) -> ScoredInvestigation:
-        digest = hashlib.sha256(
-            f"{self._seed}:{investigation.id}".encode("utf-8")
-        ).hexdigest()
+        digest = hashlib.sha256(f"{self._seed}:{investigation.id}".encode()).hexdigest()
         value = int(digest[:8], 16) / 0xFFFFFFFF
         return ScoredInvestigation(
             investigation=investigation,

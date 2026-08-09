@@ -45,7 +45,11 @@ class RetrievalTrace:
             "request_id": self.request_id,
             "query": self.query,
             "method_results": [
-                {"method": m.method, "candidates": m.candidates, "latency_ms": round(m.latency_ms, 3)}
+                {
+                    "method": m.method,
+                    "candidates": m.candidates,
+                    "latency_ms": round(m.latency_ms, 3),
+                }
                 for m in self.method_results
             ],
             "candidate_count": self.candidate_count,

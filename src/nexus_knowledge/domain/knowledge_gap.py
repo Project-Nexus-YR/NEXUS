@@ -43,7 +43,7 @@ class KnowledgeGap:
     uncertainty: float = 0.0  # 0..1, how uncertain the region is
     importance: float = 0.0  # 0..1
     estimated_cost: float = 0.0  # relative cost units
-    candidate_investigations: list["Investigation"] = field(default_factory=list)
+    candidate_investigations: list[Investigation] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     id: str = field(default_factory=lambda: new_id("gap"))
     created_at: str = field(default_factory=now_iso)

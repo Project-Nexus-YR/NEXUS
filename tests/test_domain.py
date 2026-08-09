@@ -2,7 +2,7 @@
 
 import pytest
 
-from nexus_knowledge.domain.claim import Claim, Evidence, Provenance
+from nexus_knowledge.domain.claim import Claim, Provenance
 from nexus_knowledge.domain.common import Confidence, VerificationState
 from nexus_knowledge.domain.document import Chunk, Document, Span
 from nexus_knowledge.domain.entity import Entity, Relation
@@ -47,9 +47,10 @@ class TestSpan:
 class TestChunk:
     def test_id_is_deterministic(self):
         doc = Document(source_id="s", title="t", content_type="text", text="x")
-        assert Chunk(document_id=doc.id, index=1, text="x").id == Chunk(
-            document_id=doc.id, index=1, text="x"
-        ).id
+        assert (
+            Chunk(document_id=doc.id, index=1, text="x").id
+            == Chunk(document_id=doc.id, index=1, text="x").id
+        )
 
     def test_id_derives_from_document_and_index(self):
         chunk = Chunk(document_id="doc_a", index=0, text="x")

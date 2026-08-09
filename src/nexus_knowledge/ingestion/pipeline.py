@@ -65,7 +65,7 @@ class IngestionPipeline:
         entity_extractor: EntityExtractor,
         relation_extractor: RelationExtractor,
         chunker: Chunker | None = None,
-        default_adapter: SourceAdapter = TextAdapter(),
+        default_adapter: SourceAdapter | None = None,
     ) -> None:
         self._repository = repository
         self._graph = graph
@@ -74,7 +74,7 @@ class IngestionPipeline:
         self._entity_extractor = entity_extractor
         self._relation_extractor = relation_extractor
         self._chunker = chunker or RecursiveChunker()
-        self._adapter = default_adapter
+        self._adapter = default_adapter or TextAdapter()
 
     # -- public API ---------------------------------------------------
     def ingest(
@@ -139,9 +139,7 @@ class IngestionPipeline:
             if entity.id not in {e.id for e in result.entities}:
                 result.entities.append(entity)
 
-        extracted_relations = self._relation_extractor.extract(
-            chunk, document, extracted_entities
-        )
+        extracted_relations = self._relation_extractor.extract(chunk, document, extracted_entities)
         for extracted in extracted_relations:
             subject_id = entity_ids.get(extracted.subject.lower())
             object_id = entity_ids.get(extracted.object.lower())
@@ -158,7 +156,11 @@ class IngestionPipeline:
                 verification_state=VerificationState.UNVERIFIED,
             )
             evidence = self._build_evidence(
-                claim.id, chunk, document, extracted.span, float(extracted.confidence),
+                claim.id,
+                chunk,
+                document,
+                extracted.span,
+                float(extracted.confidence),
             )
             claim.supporting_evidence = [evidence.id]
             self._repository.claims.save(claim)

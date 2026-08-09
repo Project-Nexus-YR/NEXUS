@@ -15,16 +15,16 @@ from .extractors import (
     ExtractedRelation,
     RelationExtractor,
 )
-from .reranker import RerankCandidate, Reranker
 from .repository import (
     ClaimRepository,
     DocumentRepository,
-    EvidenceRepository,
     EntityRepository,
+    EvidenceRepository,
     KnowledgeRepository,
     RelationRepository,
     SourceRepository,
 )
+from .reranker import RerankCandidate, Reranker
 from .search import SearchProvider, SearchResult
 from .vector_store import VectorHit, VectorStore
 

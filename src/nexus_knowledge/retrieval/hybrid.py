@@ -19,8 +19,8 @@ from dataclasses import dataclass, field
 from ..domain.document import Chunk
 from ..graph.graph import KnowledgeGraph
 from ..port.embeddings import EmbeddingProvider
-from ..port.reranker import RerankCandidate
 from ..port.repository import KnowledgeRepository
+from ..port.reranker import RerankCandidate
 from ..port.vector_store import VectorStore
 from .entity import EntityIndex
 from .entity_retrieval import EntityRetriever
@@ -132,7 +132,9 @@ class HybridRetriever:
         method_results: list[list] = []
         if "lexical" in self._active_methods:
             method_results.append(
-                self._timed("lexical", lambda: self._lexical.search(analysis.tokens, top_k=pool), trace)
+                self._timed(
+                    "lexical", lambda: self._lexical.search(analysis.tokens, top_k=pool), trace
+                )
             )
         if "vector" in self._active_methods:
             method_results.append(

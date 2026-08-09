@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from ..embedding.hashing import tokenize
 from ..graph.graph import KnowledgeGraph
 from ..port.embeddings import EmbeddingProvider
 from ..port.repository import RelationRepository
@@ -30,8 +29,7 @@ class VectorRetriever:
             embedding.vector, top_k=top_k, metadata_filter=metadata_filter
         )
         return [
-            RetrievalHit(object_id=hit.object_id, score=hit.score, method="vector")
-            for hit in hits
+            RetrievalHit(object_id=hit.object_id, score=hit.score, method="vector") for hit in hits
         ]
 
 

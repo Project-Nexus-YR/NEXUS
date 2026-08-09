@@ -88,7 +88,7 @@ def pagerank(
             mass = damping * rank[i]
             for j, weight in edges[i]:
                 new_rank[j] += mass * weight
-        diff = sum(abs(a - b) for a, b in zip(rank, new_rank))
+        diff = sum(abs(a - b) for a, b in zip(rank, new_rank, strict=True))
         rank = new_rank
         if diff < tol:
             break

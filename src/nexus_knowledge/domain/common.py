@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
-from enum import Enum
+from dataclasses import dataclass
+from enum import StrEnum
 
 __all__ = [
     "Confidence",
@@ -42,7 +42,7 @@ class Confidence:
 ConfidenceValue = Confidence
 
 
-class VerificationState(str, Enum):
+class VerificationState(StrEnum):
     """Verification state of a claim or relation.
 
     The lifecycle is intentionally not a simple linear progression:

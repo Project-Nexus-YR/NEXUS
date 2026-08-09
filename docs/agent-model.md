@@ -1,8 +1,8 @@
 # Agent model
 
-`Agent`, `AgentRun`, `AgentStep`, `Task`, `TaskAttempt`, `Observation`, `ToolCall`,
-`Investigation`, `Hypothesis`, and `Experiment` have opaque stable IDs. An Agent role
-is data: capabilities, preferred tools, constraints, instructions, and output schema.
+`Agent`, `AgentRun`, `AgentStep`, `Observation`, and `ToolCall` have opaque stable IDs.
+An Agent role is data: capabilities, preferred tools, constraints, instructions, and
+output schema.
 The built-in role names are Planner, Researcher, Experimenter, Analyst, Critic, and
 Synthesizer; adding a role does not change scheduler or loop code.
 

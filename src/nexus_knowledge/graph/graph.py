@@ -15,10 +15,8 @@ plain adjacency structure, so they can be reused by any backend.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Iterator
+from dataclasses import dataclass
 
-from ..domain.document import Span
 from ..domain.entity import Entity, Relation
 
 __all__ = [
@@ -41,7 +39,7 @@ class Edge:
     weight: float = 1.0
 
     @classmethod
-    def from_relation(cls, relation: Relation) -> "Edge":
+    def from_relation(cls, relation: Relation) -> Edge:
         return cls(
             relation_id=relation.id,
             subject_id=relation.subject_id,
@@ -178,7 +176,9 @@ class KnowledgeGraph(ABC):
 
     # -- analytics ----------------------------------------------------
     @abstractmethod
-    def pagerank(self, damping: float = 0.85, max_iter: int = 100, tol: float = 1e-6) -> dict[str, float]: ...
+    def pagerank(
+        self, damping: float = 0.85, max_iter: int = 100, tol: float = 1e-6
+    ) -> dict[str, float]: ...
 
     @abstractmethod
     def personalized_pagerank(

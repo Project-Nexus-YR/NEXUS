@@ -6,7 +6,6 @@ import pytest
 from nexus_knowledge.embedding.hashing import FeatureHashEmbedder, tokenize
 from nexus_knowledge.embedding.local_store import LocalVectorStore
 from nexus_knowledge.embedding.provider import LocalEmbeddingProvider
-from nexus_knowledge.port.embeddings import Embedding
 
 
 class TestTokenizer:
