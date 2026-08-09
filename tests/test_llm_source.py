@@ -114,11 +114,7 @@ class TestOpenAICompatibleLLMSource:
         assert captured["payload"]["model"] == "test-model"
 
     def test_limit_truncates_results(self):
-        body = {
-            "choices": [
-                {"message": {"content": f"answer {index}"}} for index in range(3)
-            ]
-        }
+        body = {"choices": [{"message": {"content": f"answer {index}"}} for index in range(3)]}
 
         def transport(url: str, payload: dict[str, Any], timeout: float) -> bytes:
             return json.dumps(body).encode("utf-8")
@@ -277,9 +273,7 @@ class TestLLMSourceInHarness:
         registry = ToolRegistry(policy)
         registry.register(
             LLMSourceTool(
-                DeterministicLLMSource(
-                    {"Where is Atlas HQ?": "Atlas is headquartered in London."}
-                )
+                DeterministicLLMSource({"Where is Atlas HQ?": "Atlas is headquartered in London."})
             )
         )
         executor = AgentExecutor(self._Model(), self._Model(), registry)
@@ -315,9 +309,7 @@ class TestLLMSourceInHarness:
         from nexus_runtime.investigation.verification import ClaimVerifier, VerificationPolicy
 
         verification = ClaimVerifier(
-            VerificationPolicy(
-                min_independent_sources=1, allow_probable_updates=True
-            )
+            VerificationPolicy(min_independent_sources=1, allow_probable_updates=True)
         ).verify(EvidenceEvaluator().evaluate(extraction.evidence_set))
         assert verification.decisions[0].eligible_for_update
         integrator = KnowledgeUpdateIntegrator(ingested_engine)

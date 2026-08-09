@@ -125,8 +125,7 @@ def test_pure_hallucination_yields_no_claims() -> None:
 
     assert not extraction.candidates
     assert all(
-        diagnostic.code == "unknown_observation_reference"
-        for diagnostic in extraction.diagnostics
+        diagnostic.code == "unknown_observation_reference" for diagnostic in extraction.diagnostics
     )
 
 

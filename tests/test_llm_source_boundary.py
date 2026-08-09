@@ -97,9 +97,7 @@ def _pipeline(observations: tuple[ToolObservation, ...]):
 
 
 def test_single_low_quality_llm_source_cannot_verify() -> None:
-    observations = (
-        _observation("obs-llm-one", "llm://consensus-one", source_quality=0.2),
-    )
+    observations = (_observation("obs-llm-one", "llm://consensus-one", source_quality=0.2),)
 
     _, report = _pipeline(observations)
 
@@ -158,9 +156,7 @@ def test_sub_threshold_llm_quality_is_excluded_even_at_max_confidence() -> None:
 
 
 def test_llm_source_is_deferred_not_submitted(ingested_engine) -> None:
-    observations = (
-        _observation("obs-llm-deferred", "llm://consensus", source_quality=0.2),
-    )
+    observations = (_observation("obs-llm-deferred", "llm://consensus", source_quality=0.2),)
     extraction, report = _pipeline(observations)
     count_before = ingested_engine.repository.claims.count()
 

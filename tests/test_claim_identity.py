@@ -219,9 +219,10 @@ def test_evidence_fingerprint_is_stable_for_identical_content() -> None:
         text="Acme is active", subject="Acme", predicate="status", object="active"
     )
 
-    assert evidence(statement, "source-a", "report one").fingerprint == evidence(
-        statement, "source-a", "report one"
-    ).fingerprint
+    assert (
+        evidence(statement, "source-a", "report one").fingerprint
+        == evidence(statement, "source-a", "report one").fingerprint
+    )
 
 
 def test_evidence_fingerprint_is_source_sensitive() -> None:
@@ -229,9 +230,10 @@ def test_evidence_fingerprint_is_source_sensitive() -> None:
         text="Acme is active", subject="Acme", predicate="status", object="active"
     )
 
-    assert evidence(statement, "source-a", "report one").fingerprint != evidence(
-        statement, "source-b", "report one"
-    ).fingerprint
+    assert (
+        evidence(statement, "source-a", "report one").fingerprint
+        != evidence(statement, "source-b", "report one").fingerprint
+    )
 
 
 def test_evidence_fingerprint_is_excerpt_sensitive() -> None:
@@ -239,9 +241,10 @@ def test_evidence_fingerprint_is_excerpt_sensitive() -> None:
         text="Acme is active", subject="Acme", predicate="status", object="active"
     )
 
-    assert evidence(statement, "source-a", "report one").fingerprint != evidence(
-        statement, "source-a", "report two"
-    ).fingerprint
+    assert (
+        evidence(statement, "source-a", "report one").fingerprint
+        != evidence(statement, "source-a", "report two").fingerprint
+    )
 
 
 def test_evidence_fingerprint_is_role_sensitive() -> None:
@@ -249,9 +252,12 @@ def test_evidence_fingerprint_is_role_sensitive() -> None:
         text="Acme is active", subject="Acme", predicate="status", object="active"
     )
 
-    assert evidence(statement, "source-a", "report one").fingerprint != evidence(
-        statement, "source-a", "report one", role=EvidenceRole.CONTRADICTING
-    ).fingerprint
+    assert (
+        evidence(statement, "source-a", "report one").fingerprint
+        != evidence(
+            statement, "source-a", "report one", role=EvidenceRole.CONTRADICTING
+        ).fingerprint
+    )
 
 
 def test_evidence_fingerprint_ignores_agent_confidence() -> None:

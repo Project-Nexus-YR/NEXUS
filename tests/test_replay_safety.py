@@ -104,6 +104,7 @@ def run_pipeline(
     acquisition = ClaimAcquisitionService().acquire(extraction, verification)
     return extraction, evaluation, verification, acquisition
 
+
 def ids(extraction) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
     return (
         tuple(item.claim.claim_id for item in extraction.candidates),

@@ -247,21 +247,15 @@ def test_candidate_without_a_verification_decision_is_rejected() -> None:
         ),
     )
     acme_evidence = tuple(
-        item
-        for item in extraction.evidence_set.evidence
-        if item.claim.claim_id == "claim-acme"
+        item for item in extraction.evidence_set.evidence if item.claim.claim_id == "claim-acme"
     )
     partial_evidence = EvidenceSet(session_id=SESSION, evidence=acme_evidence)
-    verification = ClaimVerifier().verify(
-        EvidenceEvaluator().evaluate(partial_evidence)
-    )
+    verification = ClaimVerifier().verify(EvidenceEvaluator().evaluate(partial_evidence))
 
     report = ClaimAcquisitionService().acquire(extraction, verification)
 
     orphan_acquisition = next(
-        item
-        for item in report.acquisitions
-        if item.candidate.claim.claim_id == "claim-orphan"
+        item for item in report.acquisitions if item.candidate.claim.claim_id == "claim-orphan"
     )
     assert orphan_acquisition.status == CandidateStatus.REJECTED
     assert orphan_acquisition.decision is None

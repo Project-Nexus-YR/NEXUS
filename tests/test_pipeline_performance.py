@@ -60,12 +60,8 @@ def _claim(index: int) -> ClaimStatement:
 
 def _result(claim_count: int) -> InvestigationResult:
     observations = tuple(
-        _observation(f"observation-{index}-a")
-        for index in range(claim_count)
-    ) + tuple(
-        _observation(f"observation-{index}-b")
-        for index in range(claim_count)
-    )
+        _observation(f"observation-{index}-a") for index in range(claim_count)
+    ) + tuple(_observation(f"observation-{index}-b") for index in range(claim_count))
     conclusions = tuple(
         AgentConclusion(
             claim=_claim(index),

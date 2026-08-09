@@ -162,9 +162,7 @@ def test_every_evidence_lineage_matches_the_result_correlation_chain() -> None:
 
 
 def test_evidence_carries_observation_excerpt_and_input_payload() -> None:
-    observations = (
-        observation("observation-a", excerpt="reported by regulator"),
-    )
+    observations = (observation("observation-a", excerpt="reported by regulator"),)
     investigation_result = result(observations, (conclusion(("observation-a",)),))
 
     item = CandidateClaimExtractor().extract(investigation_result).evidence_set.evidence[0]
