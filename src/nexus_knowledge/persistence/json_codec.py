@@ -12,7 +12,8 @@ import json
 from dataclasses import is_dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from types import UnionType
+from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from ..domain.claim import Claim, Evidence
 from ..domain.common import Confidence
@@ -104,8 +105,34 @@ def from_plain(value: Any) -> Any:
                     span=data.get("span"),
                     metadata=data.get("metadata", {}),
                 )
+            hints = get_type_hints(cls)
+            data = {
+                key: _restore_annotated_value(hints.get(key), item)
+                for key, item in data.items()
+            }
             return cls(**data)
         return {k: from_plain(v) for k, v in value.items()}
+    return value
+
+
+def _restore_annotated_value(annotation: Any, value: Any) -> Any:
+    """Restore enums and immutable collections erased by plain JSON."""
+    if annotation is None:
+        return value
+    if isinstance(annotation, type) and issubclass(annotation, Enum):
+        return annotation(value)
+    origin = get_origin(annotation)
+    arguments = get_args(annotation)
+    if origin is tuple and isinstance(value, list):
+        item_annotation = arguments[0] if arguments else None
+        return tuple(_restore_annotated_value(item_annotation, item) for item in value)
+    if origin is list and isinstance(value, list):
+        item_annotation = arguments[0] if arguments else None
+        return [_restore_annotated_value(item_annotation, item) for item in value]
+    if origin in {Union, UnionType}:
+        for option in arguments:
+            if isinstance(option, type) and issubclass(option, Enum):
+                return option(value)
     return value
 
 
@@ -120,7 +147,7 @@ def loads(text: str) -> Any:
 def save_snapshot(repo: InMemoryKnowledgeRepository, path: str | Path) -> None:
     """Persist the entire knowledge base to a JSON snapshot file."""
     payload = {
-        "version": 1,
+        "version": 2,
         "sources": [to_plain(s) for s in repo.sources.all()],
         "documents": [to_plain(d) for d in repo.documents.all()],
         "chunks": [to_plain(c) for c in repo.chunks.all()],
@@ -128,8 +155,13 @@ def save_snapshot(repo: InMemoryKnowledgeRepository, path: str | Path) -> None:
         "relations": [to_plain(r) for r in repo.relations.all()],
         "claims": [to_plain(c) for c in repo.claims.all()],
         "evidence": [to_plain(e) for e in repo.evidence.all()],
+        "contradictions": [to_plain(item) for item in repo.contradictions.all()],
+        "gaps": [to_plain(item) for item in repo.gaps.all()],
+        "investigations": [to_plain(item) for item in repo.investigations.all()],
     }
-    Path(path).write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def load_snapshot(path: str | Path) -> InMemoryKnowledgeRepository:
@@ -150,4 +182,10 @@ def load_snapshot(path: str | Path) -> InMemoryKnowledgeRepository:
         repo.claims.save(from_plain(item))
     for item in payload.get("evidence", []):
         repo.evidence.save(from_plain(item))
+    for item in payload.get("contradictions", []):
+        repo.contradictions.save(from_plain(item))
+    for item in payload.get("gaps", []):
+        repo.gaps.save(from_plain(item))
+    for item in payload.get("investigations", []):
+        repo.investigations.save(from_plain(item))
     return repo

@@ -1,6 +1,11 @@
 """Autonomous-investigation domain, planning, evidence, and application services."""
 
-from .application import InvestigationApplication, IterationOutcome, PlanningOutcome
+from .application import (
+    CitationVerificationPort,
+    InvestigationApplication,
+    IterationOutcome,
+    PlanningOutcome,
+)
 from .evidence import Evidence, EvidenceSet, InvestigationResult
 from .execution import PlanExecution, PlanExecutionController
 from .generator import CandidateInvestigation, InvestigationGenerator
@@ -21,6 +26,7 @@ from .verification import EpistemicStatus, VerificationPolicy
 
 __all__ = [
     "CandidateInvestigation",
+    "CitationVerificationPort",
     "EpistemicStatus",
     "Evidence",
     "EvidenceSet",

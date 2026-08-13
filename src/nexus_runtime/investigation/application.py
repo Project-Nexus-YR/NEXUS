@@ -60,6 +60,12 @@ class KnowledgeObservationPort(Protocol):
     def detect_contradictions(self) -> list[Any]: ...
 
 
+class CitationVerificationPort(Protocol):
+    """Optional evidence-engine boundary for auditing a synthesized conclusion."""
+
+    def verify_answer(self, draft_answer: str, *, session_id: str) -> Any: ...
+
+
 class KnowledgeObserver:
     """Observe retrieval, GraphRAG, uncertainty gaps, and contradictions via one boundary."""
 
@@ -163,6 +169,7 @@ class InvestigationApplication:
         termination: TerminationPolicy | None = None,
         extractor: CandidateClaimExtractor | None = None,
         acquisition: ClaimAcquisitionService | None = None,
+        citation_verification: CitationVerificationPort | None = None,
     ) -> None:
         self._observer = KnowledgeObserver(knowledge)
         self._repository = repository or InMemoryInvestigationRepository()
@@ -177,6 +184,7 @@ class InvestigationApplication:
         self._evaluator = evaluator or EvidenceEvaluator()
         self._verifier = verifier or ClaimVerifier()
         self._termination = termination or TerminationPolicy()
+        self._citation_verification = citation_verification
         update_boundary = knowledge_updates
         if update_boundary is None:
             update_boundary = cast(KnowledgeUpdatePort, knowledge)
@@ -608,6 +616,39 @@ class InvestigationApplication:
         self._metrics.increment("claims_deferred", len(acquisition.deferred))
         self._metrics.increment("claims_rejected", len(acquisition.rejected))
         self._metrics.increment("extraction_diagnostics", len(extraction.diagnostics))
+
+    def verify_citations(self, session_id: str, draft_answer: str) -> dict[str, Any]:
+        """Audit a draft conclusion and persist the complete citation report.
+
+        This optional stage is intentionally independent of knowledge-update
+        eligibility: investigation evidence answers whether claims may enter the
+        graph; the evidence engine answers whether final prose is cited precisely.
+        """
+        if self._citation_verification is None:
+            raise DomainError("citation verification adapter is not configured")
+        record = self._record(session_id)
+        report = self._citation_verification.verify_answer(draft_answer, session_id=session_id)
+        serializer = getattr(report, "to_dict", None)
+        payload = _jsonable(serializer() if callable(serializer) else report)
+        if not isinstance(payload, dict):
+            raise DomainError("citation verification report must serialize to an object")
+        record.append("citation_audit", payload)
+        self._repository.save(record)
+        metrics = payload.get("audit", {})
+        audit_metrics = metrics.get("metrics", {}) if isinstance(metrics, dict) else {}
+        if isinstance(audit_metrics, dict):
+            for name, value in audit_metrics.items():
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    self._metrics.observe(f"citation_{name}", float(value))
+        self._emit(
+            "investigation.citations_verified",
+            record,
+            {
+                "workflow_id": str(payload.get("workflow_id", "")),
+                "audit_id": str(metrics.get("audit_id", "")) if isinstance(metrics, dict) else "",
+            },
+        )
+        return payload
 
     def update_knowledge(
         self,

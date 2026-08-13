@@ -9,8 +9,17 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from .domain.source import Source, SourceKind
+from .ingestion.adapters import (
+    JsonAdapter,
+    MarkdownAdapter,
+    RepositoryAdapter,
+    SourceAdapter,
+    TextAdapter,
+)
+from .persistence.json_codec import load_snapshot, save_snapshot
 from .service.factory import Adapters, create_engine
 
 __all__ = ["main"]
@@ -29,6 +38,7 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=[SourceKind.TEXT, SourceKind.MARKDOWN, SourceKind.JSON, SourceKind.REPOSITORY],
     )
     ingest.add_argument("--gazetteer", default=None, help="JSON file mapping entity type -> names")
+    ingest.add_argument("--output", default=None, help="save the resulting knowledge snapshot")
 
     retrieve = sub.add_parser("retrieve", help="hybrid retrieval for a query")
     retrieve.add_argument("query")
@@ -61,16 +71,39 @@ def _gazetteer(path: str | None) -> dict[str, list[str]] | None:
         return json.load(handle)
 
 
+def _ingest_payload(path: str, kind: str) -> tuple[object, SourceAdapter]:
+    source_path = Path(path)
+    if kind == SourceKind.REPOSITORY or source_path.is_dir():
+        return source_path, RepositoryAdapter()
+    payload = source_path.read_text(encoding="utf-8")
+    adapter = {
+        SourceKind.MARKDOWN: MarkdownAdapter,
+        SourceKind.JSON: JsonAdapter,
+    }.get(kind, TextAdapter)()
+    return payload, adapter
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    adapters = (
-        Adapters(gazetteer=_gazetteer(args.gazetteer)) if hasattr(args, "gazetteer") else Adapters()
-    )
+    repository = load_snapshot(args.data) if getattr(args, "data", None) else None
+    adapter_arguments = {}
+    if repository is not None:
+        adapter_arguments["repository"] = repository
+    if hasattr(args, "gazetteer"):
+        adapter_arguments["gazetteer"] = _gazetteer(args.gazetteer)
+    adapters = Adapters(**adapter_arguments)
     engine = create_engine(adapters)
 
     if args.command == "ingest":
-        engine.ingest(Source(title=args.title, kind=args.kind, reference=args.path), args.path)
+        payload, adapter = _ingest_payload(args.path, args.kind)
+        engine.ingest(
+            Source(title=args.title, kind=args.kind, reference=args.path),
+            payload,
+            adapter,
+        )
         print(json.dumps(engine.healthcheck(), indent=2))
+        if args.output:
+            save_snapshot(engine.repository, args.output)
     elif args.command == "retrieve":
         result = engine.retrieve(args.query, top_k=args.top_k)
         print(json.dumps(result.to_dict(), indent=2, default=str))

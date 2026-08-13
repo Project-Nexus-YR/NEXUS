@@ -48,6 +48,10 @@ class Adapters:
 def create_engine(adapters: Adapters | None = None) -> KnowledgeEngine:
     """Build a fully wired :class:`KnowledgeEngine` from adapters."""
     adapters = adapters or Adapters()
+    for entity in adapters.repository.entities.all():
+        adapters.graph.add_entity(entity)
+    for relation in adapters.repository.relations.all():
+        adapters.graph.add_relation(relation)
     if adapters.gazetteer and isinstance(adapters.entity_extractor, GazetteerEntityExtractor):
         for entity_type, names in adapters.gazetteer.items():
             for name in names:

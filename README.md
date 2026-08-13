@@ -9,6 +9,44 @@ research goal into a durable, inspectable investigation — planning, task
 decomposition, distributed execution, critique, synthesis — and proposes
 knowledge updates through the engine's knowledge-service boundary.
 
+It also includes a first-class **Evidence Engine** (`nexus_evidence`) that
+decomposes final prose into atomic claims, retrieves exact source spans, performs
+deterministic numerical and contradiction checks, builds a citation graph, audits
+coverage and citation precision, and runs a bounded repair loop. Evidence stages
+can execute through the same durable distributed coordinator and persist in the
+same investigation record.
+
+## Visual knowledge explorer
+
+NEXUS includes a desktop-style React interface centered on a WebGL knowledge
+graph. It explores the real engine snapshot, evidence and provenance chains,
+knowledge gaps, contradictions, durable investigations, workers, and tasks
+through a thin FastAPI application boundary.
+
+```bash
+# one-time setup
+python3 -m pip install -e '.[gui]'
+npm --prefix frontend install
+
+# build the frontend and generate optional deterministic development knowledge
+npm --prefix frontend run build
+python3 scripts/generate_gui_demo.py .nexus/demo-knowledge.json
+
+# open http://127.0.0.1:8000
+nexus-gui --snapshot .nexus/demo-knowledge.json
+```
+
+For real content, persist an ingestion and launch the same server:
+
+```bash
+nexus-knowledge ingest data/report.md --kind markdown \
+  --title "Research report" --output .nexus/knowledge.json
+nexus-gui --snapshot .nexus/knowledge.json
+```
+
+See [GUI architecture and development](docs/gui.md) for the domain mapping,
+API contract, split frontend/backend workflow, and graph scalability limits.
+
 ## Components
 
 ### Nexus Knowledge (`nexus_knowledge`)
@@ -113,6 +151,19 @@ nexus-investigation-bench
 See [autonomous investigation](docs/autonomous-investigation.md) and the
 [closed epistemic loop](docs/autonomous-loop.md).
 
+### Evidence and citation verification
+
+```bash
+nexus-evidence extract --draft-file answer.md
+nexus-evidence audit --draft-file answer.md --data .nexus/knowledge.json \
+  --session-id SESSION_ID --output citation-report.json
+nexus-evidence-bench
+```
+
+See [Evidence Engine architecture and operations](docs/evidence-engine.md) for
+the schemas, distributed workflow, trust boundary, failure semantics, metrics,
+and known limits.
+
 **Quick start**
 
 ```bash
@@ -187,6 +238,9 @@ Retrieval at k=5:
 ```text
 src/nexus_knowledge/  knowledge intelligence engine (domain, graph, retrieval, eval)
 src/nexus_runtime/    autonomous research runtime (distributed execution, policy, agent loop)
+src/nexus_evidence/   atomic claims, evidence verification, citation graph and audit
+src/nexus_gui/        thin visual API and local-server composition root
+frontend/             React, TypeScript, Sigma.js visual explorer
 tests/                unit, integration, and fault-injection coverage
 docs/                 contracts, guarantees, and architecture decisions
 ```

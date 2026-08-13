@@ -28,6 +28,7 @@ from ..domain.entity import Entity, Relation
 from ..domain.knowledge_gap import KnowledgeGap
 from ..domain.source import Source
 from ..graph.graph import KnowledgeGraph, KnowledgeSubgraph
+from ..ingestion.adapters import SourceAdapter
 from ..ingestion.pipeline import IngestionPipeline, IngestionResult
 from ..knowledge.contradiction import ContradictionDetector
 from ..knowledge.gaps import GapEngine
@@ -121,9 +122,14 @@ class KnowledgeEngine:
         self.scorer = scorer or InvestigationScorer()
 
     # -- ingestion ----------------------------------------------------
-    def ingest(self, source: Source, payload: object) -> IngestionResult:
+    def ingest(
+        self,
+        source: Source,
+        payload: object,
+        adapter: SourceAdapter | None = None,
+    ) -> IngestionResult:
         """Ingest raw content, updating graph, embeddings and indexes."""
-        result = self.ingestion.ingest(source, payload)
+        result = self.ingestion.ingest(source, payload, adapter)
         self.retriever.invalidate_lexical_index()
         return result
 
@@ -135,6 +141,51 @@ class KnowledgeEngine:
         metadata_filter: dict[str, object] | None = None,
     ) -> RetrievalResult:
         return self.retriever.retrieve(query, top_k=top_k, metadata_filter=metadata_filter)
+
+    def retrieve_evidence(self, query: str, top_k: int = 5) -> list[dict[str, object]]:
+        """Return retrieval candidates with a complete public provenance locator.
+
+        This is the citation-oriented companion to :meth:`retrieve`.  It keeps
+        evidence consumers behind the service boundary instead of exposing the
+        repository implementation.
+        """
+        retrieval = self.retrieve(query, top_k=top_k)
+        documents = {item.id: item for item in self.repository.documents.all()}
+        sources = {item.id: item for item in self.repository.sources.all()}
+        records: list[dict[str, object]] = []
+        for candidate in retrieval.candidates:
+            chunk = candidate.chunk
+            document = documents.get(chunk.document_id)
+            if document is None:
+                continue
+            source = sources.get(document.source_id)
+            if source is None:
+                continue
+            metadata = dict(document.metadata)
+            records.append(
+                {
+                    "request_id": retrieval.request_id,
+                    "score": candidate.score,
+                    "text": chunk.text,
+                    "chunk_id": chunk.id,
+                    "document_id": document.id,
+                    "source_id": source.id,
+                    "source_title": source.title,
+                    "source_reference": source.reference,
+                    "source_type": source.kind,
+                    "source_metadata": dict(source.metadata),
+                    "source_quality": float(source.metadata.get("quality", 0.7)),
+                    "published_at": str(source.metadata.get("published_at", "")),
+                    "publisher": str(source.metadata.get("publisher", "")),
+                    "content_hash": str(document.metadata.get("content_hash", "")),
+                    "char_start": 0 if chunk.span is None else chunk.span.start,
+                    "char_end": len(chunk.text) if chunk.span is None else chunk.span.end,
+                    "page": metadata.get("page"),
+                    "section": metadata.get("section", chunk.metadata.get("section", "")),
+                    "paragraph": metadata.get("paragraph"),
+                }
+            )
+        return records
 
     def graphrag(self, query: str, top_k: int = 8, depth: int = 2) -> EvidenceGraph:
         return self._graphrag_engine.query(query, top_k=top_k, depth=depth)
