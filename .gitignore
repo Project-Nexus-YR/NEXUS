@@ -11,6 +11,7 @@ env/
 # Distribution / packaging
 dist/
 build/
+node_modules/
 *.egg-info/
 .eggs/
 
@@ -37,6 +38,7 @@ coverage.xml
 data/
 generated/
 artifacts/
+.nexus/
 
 # Environment / secrets
 .env

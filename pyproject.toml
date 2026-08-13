@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nexus"
-version = "0.4.0"
+version = "0.6.0"
 description = "NEXUS autonomous knowledge-discovery platform: knowledge intelligence engine and fault-tolerant research runtime"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "NEXUS" }]
-keywords = ["knowledge-graph", "graphrag", "retrieval", "knowledge-discovery", "ml", "autonomous-agents", "research-runtime"]
+keywords = ["knowledge-graph", "graphrag", "retrieval", "citations", "evidence", "knowledge-discovery", "ml", "autonomous-agents", "research-runtime"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -25,7 +25,15 @@ dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
 test = ["pytest>=7.4", "pytest-cov>=4.1"]
-dev = ["ruff>=0.6", "mypy>=1.11", "pytest>=7.4", "pytest-cov>=4.1"]
+gui = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1"]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "fastapi>=0.115,<1",
+    "httpx>=0.27,<1",
+]
 
 [project.scripts]
 nexus-knowledge = "nexus_knowledge.cli:main"
@@ -33,6 +41,9 @@ nexus-runtime = "nexus_runtime.distributed.cli:main"
 nexus-runtime-bench = "nexus_runtime.distributed.benchmark:main"
 nexus-research = "nexus_runtime.investigation.cli:main"
 nexus-investigation-bench = "nexus_runtime.investigation.benchmark:main"
+nexus-gui = "nexus_gui.cli:main"
+nexus-evidence = "nexus_evidence.cli:main"
+nexus-evidence-bench = "nexus_evidence.benchmark:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -42,7 +53,7 @@ testpaths = ["tests"]
 addopts = "-ra -q"
 
 [tool.coverage.run]
-source = ["nexus_knowledge", "nexus_runtime"]
+source = ["nexus_knowledge", "nexus_runtime", "nexus_evidence"]
 branch = true
 
 [tool.coverage.report]
@@ -60,7 +71,7 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["src/nexus_runtime"]
+files = ["src/nexus_runtime", "src/nexus_evidence"]
 
 [[tool.mypy.overrides]]
 module = ["nexus_knowledge.*", "numpy.*"]

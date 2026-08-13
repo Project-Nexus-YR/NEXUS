@@ -17,6 +17,7 @@ The autonomous investigation application emits these stable lifecycle events:
 - `investigation.evidence_collected`
 - `investigation.evaluated`
 - `investigation.verification_started`
+- `investigation.citations_verified`
 - `investigation.knowledge_updated`
 - `investigation.iteration_completed`
 - `investigation.completed`
@@ -25,6 +26,10 @@ The autonomous investigation application emits these stable lifecycle events:
 Their payloads include the session, objective, and iteration. The session is the trace
 identifier and the objective is the correlation identifier, preserving a stable chain
 from planning through distributed execution and knowledge update.
+
+The citation event carries the evidence workflow and citation audit identifiers.
+The complete report remains an immutable `citation_audit` investigation artifact
+instead of being duplicated into the event stream.
 
 `EventBus` is broker-independent: `publish`, `subscribe`, `acknowledge`, and
 `dead_letter`. `InMemoryEventBus` is deterministic for tests. Production adapters must

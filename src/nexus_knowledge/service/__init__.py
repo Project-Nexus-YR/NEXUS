@@ -16,3 +16,20 @@ __all__ = [
     "ProvenanceResponse",
     "create_engine",
 ]
+from .explorer import (
+    ExplorerEdge,
+    ExplorerFilters,
+    ExplorerGraph,
+    ExplorerNode,
+    ExplorerNodeDetail,
+    KnowledgeExplorer,
+)
+
+__all__ += [
+    "ExplorerEdge",
+    "ExplorerFilters",
+    "ExplorerGraph",
+    "ExplorerNode",
+    "ExplorerNodeDetail",
+    "KnowledgeExplorer",
+]
