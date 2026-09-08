@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from .._tokenization import tokenize
 from ..domain.document import Chunk
-from ..embedding.hashing import tokenize
 
 __all__ = ["RetrievalHit", "LexicalRetriever"]
 
@@ -27,9 +28,17 @@ class LexicalRetriever:
     deterministic.
     """
 
-    def __init__(self, k1: float = 1.5, b: float = 0.75) -> None:
+    def __init__(
+        self,
+        k1: float = 1.5,
+        b: float = 0.75,
+        tokenizer: Callable[[str], list[str]] = tokenize,
+    ) -> None:
+        if not callable(tokenizer):
+            raise TypeError("tokenizer must be callable")
         self.k1 = k1
         self.b = b
+        self._tokenizer = tokenizer
         self._chunks: dict[str, str] = {}
         self._term_tf: dict[str, dict[str, int]] = {}
         self._doc_len: dict[str, int] = {}
@@ -54,7 +63,7 @@ class LexicalRetriever:
         self._doc_freq = {}
         total_length = 0
         for chunk_id, text in self._chunks.items():
-            tokens = tokenize(text)
+            tokens = self._tokenizer(text)
             self._doc_len[chunk_id] = len(tokens)
             total_length += len(tokens)
             tf: dict[str, int] = {}

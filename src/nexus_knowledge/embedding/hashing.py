@@ -13,18 +13,12 @@ from __future__ import annotations
 
 import hashlib
 import math
-import re
 
 import numpy as np
 
+from .._tokenization import tokenize
+
 __all__ = ["tokenize", "FeatureHashEmbedder"]
-
-_TOKEN_RE = re.compile(r"[a-zA-Z0-9]+", re.UNICODE)
-
-
-def tokenize(text: str) -> list[str]:
-    """Lower-cased alphanumeric token sequence."""
-    return [token.lower() for token in _TOKEN_RE.findall(text)]
 
 
 class FeatureHashEmbedder:

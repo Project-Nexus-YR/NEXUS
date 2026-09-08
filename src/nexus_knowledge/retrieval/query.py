@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..embedding.hashing import tokenize
+from .._tokenization import tokenize
 
 __all__ = ["QueryAnalysis", "analyze_query"]
 

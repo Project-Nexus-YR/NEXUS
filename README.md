@@ -264,3 +264,13 @@ replay, boundaries, closed loop, LLM-source trust, performance). See
 
 See [architecture](docs/architecture.md), [runtime](docs/runtime.md), and
 [distributed runtime](docs/distributed-runtime.md) for the integration boundary.
+
+## Citation candidate enumeration
+
+The public `CitationCandidatePort.candidates(filters=None)` is an additive, query-independent
+read boundary for citation-ingested content. `CitationLexicalSearch` implements it using the same
+complete-aggregate provenance validation and filters as lexical citation search. It returns all
+eligible persisted chunks in deterministic source/document/segment order with neutral scores.
+Consumers can build disposable semantic indexes without accessing repository internals or changing
+`CitationSearchPort.search()` behavior. Candidate enumeration never changes evidence identity or
+the NEXUS snapshot schema.

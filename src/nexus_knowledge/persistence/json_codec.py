@@ -23,6 +23,7 @@ from ..domain.entity import Entity, Relation
 from ..domain.hypothesis import Experiment, Hypothesis, Observation, Result
 from ..domain.knowledge_gap import Investigation, KnowledgeGap
 from ..domain.source import Source
+from ..port.citation_search import CitationCandidate, CitationSearchFilters
 from .memory import InMemoryKnowledgeRepository
 
 __all__ = [
@@ -66,6 +67,8 @@ def to_plain(value: Any) -> Any:
 
 def _resolve(value: str) -> type[Any]:
     return {
+        "citationcandidate": CitationCandidate,
+        "citationsearchfilters": CitationSearchFilters,
         "claim": Claim,
         "chunk": Chunk,
         "confidence": Confidence,
@@ -107,8 +110,7 @@ def from_plain(value: Any) -> Any:
                 )
             hints = get_type_hints(cls)
             data = {
-                key: _restore_annotated_value(hints.get(key), item)
-                for key, item in data.items()
+                key: _restore_annotated_value(hints.get(key), item) for key, item in data.items()
             }
             return cls(**data)
         return {k: from_plain(v) for k, v in value.items()}

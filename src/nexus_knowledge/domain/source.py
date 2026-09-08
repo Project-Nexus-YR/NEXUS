@@ -17,6 +17,8 @@ class SourceKind:
     TEXT = "text"
     MARKDOWN = "markdown"
     JSON = "json"
+    PDF = "pdf"
+    EPUB = "epub"
     REPOSITORY = "repository"
     DATABASE = "database"
     WEB = "web"
