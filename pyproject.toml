@@ -25,7 +25,14 @@ dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
 citation = ["pypdf>=6.16.2,<7", "defusedxml>=0.7,<1"]
-test = ["pytest>=7.4", "pytest-cov>=4.1", "pypdf>=6.16.2,<7", "defusedxml>=0.7,<1"]
+test = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "pypdf>=6.16.2,<7",
+    "defusedxml>=0.7,<1",
+    "fastapi>=0.115,<1",
+    "httpx>=0.27,<1",
+]
 gui = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1"]
 dev = [
     "ruff>=0.6",
